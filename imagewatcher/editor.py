@@ -499,11 +499,21 @@ class EditorWindow(Gtk.Window):
         return True
 
     def _on_scroll(self, _widget, event):
-        if event.state & Gdk.ModifierType.CONTROL_MASK:
-            factor = 1.1 if event.direction == Gdk.ScrollDirection.UP else 0.9
-            self._zoom(factor)
-            return True
-        return False
+        delta = 0.0
+        if event.direction == Gdk.ScrollDirection.SMOOTH:
+            try:
+                _ok, _dx, delta = event.get_scroll_deltas()
+            except Exception:
+                delta = 0.0
+        elif event.direction == Gdk.ScrollDirection.UP:
+            delta = -1.0
+        elif event.direction == Gdk.ScrollDirection.DOWN:
+            delta = 1.0
+        if not delta:
+            return False
+        factor = max(0.5, min(2.0, 1.0 - delta * 0.12))
+        self._zoom(factor)
+        return True
 
     def _on_key(self, _widget, event):
         if event.state & Gdk.ModifierType.CONTROL_MASK:
@@ -521,6 +531,12 @@ class EditorWindow(Gtk.Window):
                 return True
             if event.keyval == Gdk.KEY_0:
                 self._fit_to_window()
+                return True
+            if event.keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
+                self._zoom(1.25)
+                return True
+            if event.keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
+                self._zoom(0.8)
                 return True
         return False
 

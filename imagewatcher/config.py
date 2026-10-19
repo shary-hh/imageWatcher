@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from . import __app_id__
+from .actions import HOTKEY_DEFAULTS
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / __app_id__
 CONFIG_FILE = CONFIG_DIR / "config.json"
@@ -19,14 +20,7 @@ DEFAULTS = {
     "delay_seconds": 3,
     "last_region": None,
     "fixed_region_size": [360, 360],
-    "hotkeys": {
-        "fullscreen": "Ctrl+Alt+1",
-        "window": "Ctrl+Alt+3",
-        "region": "Ctrl+Alt+2",
-        "fixed": "Ctrl+Alt+5",
-        "freehand": "Ctrl+Alt+6",
-        "repeat": "Ctrl+Alt+4",
-    },
+    "hotkeys": dict(HOTKEY_DEFAULTS),
     "hotkeys_enabled": True,
     "color_format": "hex",
     "color_history": [],

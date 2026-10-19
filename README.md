@@ -64,7 +64,8 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 ### Integracion
 - Barra de captura flotante.
 - Icono en la bandeja del sistema.
-- Atajos de teclado globales (X11).
+- Atajos de teclado globales (X11) configurables para capturas, editor,
+  grabador, herramientas de diseno y acciones de la aplicacion.
 - Preferencias persistentes en `~/.config/imagewatcher/config.json`.
 - Inicio automatico al entrar en sesion (opcional).
 
@@ -150,6 +151,10 @@ Puedes mover la barra arrastrandola.
 
 Los atajos se cambian en **Preferencias > Atajos** con el formato
 `modificadores+tecla`, por ejemplo `Print`, `Ctrl+Alt+1` o `Shift+Alt+P`.
+Ademas de las capturas se pueden asignar atajos al editor, grabador,
+herramientas de diseno (color, lupa, regla, punto de mira, transportador,
+pizarra), ocultar superposiciones, mostrar/ocultar la barra, preferencias,
+guia de uso y salir. Deja el campo vacio para desactivar un atajo.
 
 > Si usas `Print`/`Shift+Print` y no funcionan, es porque Cinnamon ya los tiene
 > asignados: desactivalos en *Preferencias del sistema > Teclado > Atajos* o usa
@@ -157,7 +162,7 @@ Los atajos se cambian en **Preferencias > Atajos** con el formato
 
 ## Atajos del editor
 `Ctrl+Z` deshacer, `Ctrl+Y` rehacer, `Ctrl+S` guardar, `Ctrl+C` copiar,
-`Ctrl+0` ajustar a ventana, `Ctrl+rueda` zoom, boton central arrastrar = desplazar.
+`Ctrl+0` ajustar a ventana, `rueda` o `Ctrl++`/`Ctrl+-` zoom, boton central arrastrar = desplazar.
 
 ## Arena de pruebas (sandbox)
 

@@ -14,6 +14,7 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 from . import __app_id__, __app_name__, __version__, capture, ui
+from .actions import HOTKEY_ACTIONS
 from .config import Config
 from .editor import EditorWindow
 from .hotkeys import HotkeyManager
@@ -293,7 +294,24 @@ class Application:
                 "region": lambda: self.do_capture("region"),
                 "fixed": lambda: self.do_capture("fixed"),
                 "freehand": lambda: self.do_capture("freehand"),
+                "scrolling": lambda: self.do_capture("scrolling"),
+                "delayed": lambda: self.do_capture("delayed"),
+                "monitor": lambda: self.do_capture("monitor"),
                 "repeat": lambda: self.do_capture("repeat"),
+                "editor": self.open_editor_blank,
+                "recorder": lambda: self.open_tool("recorder"),
+                "color": lambda: self.open_tool("color"),
+                "magnifier": lambda: self.open_tool("magnifier"),
+                "ruler": lambda: self.open_tool("ruler"),
+                "crosshair": lambda: self.open_tool("crosshair"),
+                "protractor": lambda: self.open_tool("protractor"),
+                "whiteboard": lambda: self.open_tool("whiteboard"),
+                "hide_overlays": self._hide_overlays,
+                "preferences": self.open_preferences,
+                "welcome": self.show_welcome,
+                "show_bar": lambda: self._set_bar_visible(True),
+                "hide_bar": lambda: self._set_bar_visible(False),
+                "quit": self.quit,
             }
         )
         if self.config.get("hotkeys_enabled", True):
@@ -728,7 +746,7 @@ class PreferencesDialog(Gtk.Dialog):
         ui.apply_dark(self)
         self.app = app
         self.config = app.config
-        self.set_default_size(520, 460)
+        self.set_default_size(580, 560)
         self.add_buttons("Cancelar", Gtk.ResponseType.CANCEL, "Guardar", Gtk.ResponseType.OK)
 
         notebook = Gtk.Notebook()
@@ -845,23 +863,35 @@ class PreferencesDialog(Gtk.Dialog):
             0,
         )
 
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        content.set_margin_end(8)
+
         self.hotkey_entries = {}
-        labels = {
-            "fullscreen": "Pantalla completa",
-            "window": "Ventana activa",
-            "region": "Region",
-            "fixed": "Region fija",
-            "freehand": "Freehand",
-            "repeat": "Repetir ultima",
-        }
-        grid = Gtk.Grid(column_spacing=10, row_spacing=6)
-        for row, (key, label) in enumerate(labels.items()):
+        current_group = None
+        grid = None
+        row = 0
+        hotkeys = self.config.get("hotkeys", {})
+        for action, label, group, default in HOTKEY_ACTIONS:
+            if group != current_group:
+                current_group = group
+                heading = Gtk.Label(xalign=0)
+                heading.set_markup(f"<b>{group}</b>")
+                content.pack_start(heading, False, False, 4)
+                grid = Gtk.Grid(column_spacing=10, row_spacing=6)
+                content.pack_start(grid, False, False, 0)
+                row = 0
             grid.attach(Gtk.Label(label=label + ":", xalign=0), 0, row, 1, 1)
             entry = Gtk.Entry()
-            entry.set_text(self.config.get("hotkeys", {}).get(key, ""))
+            entry.set_text(hotkeys.get(action, default))
+            entry.set_placeholder_text("Sin atajo")
             grid.attach(entry, 1, row, 1, 1)
-            self.hotkey_entries[key] = entry
-        box.pack_start(grid, False, False, 0)
+            self.hotkey_entries[action] = entry
+            row += 1
+
+        scroller.add(content)
+        box.pack_start(scroller, True, True, 0)
         return box
 
     def _record_page(self):

@@ -1,7 +1,22 @@
 """Pruebas de los atajos globales."""
 import pytest
 
+from imagewatcher.actions import HOTKEY_ACTIONS, HOTKEY_DEFAULTS
 from imagewatcher.hotkeys import HotkeyManager
+
+
+def test_actions_registry_is_complete():
+    names = [action for action, _label, _group, _default in HOTKEY_ACTIONS]
+    assert len(names) >= 20
+    assert len(names) == len(set(names))
+    assert set(names) == set(HOTKEY_DEFAULTS)
+    for action in (
+        "fullscreen", "window", "region", "fixed", "freehand", "scrolling",
+        "delayed", "monitor", "repeat", "editor", "recorder", "color",
+        "magnifier", "ruler", "crosshair", "protractor", "whiteboard",
+        "hide_overlays", "preferences", "welcome", "show_bar", "hide_bar", "quit",
+    ):
+        assert action in HOTKEY_DEFAULTS
 
 
 def test_parse_modifiers_and_key():
@@ -10,6 +25,26 @@ def test_parse_modifiers_and_key():
     assert manager._parse("Print") == (0, "print")
     assert manager._parse("Shift+Alt+P") == (0x0001 | 0x0008, "p")
     assert manager._parse("") is None
+
+
+def test_preferences_lists_every_hotkey_action(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from gi.repository import Gtk
+
+    from imagewatcher import app as app_module
+    from imagewatcher import config as config_module
+    from imagewatcher.config import Config
+
+    monkeypatch.setattr(config_module, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config_module, "CONFIG_FILE", tmp_path / "config.json")
+    monkeypatch.setattr(
+        app_module.Gtk.Dialog, "run", lambda self: Gtk.ResponseType.CANCEL
+    )
+
+    dialog = app_module.PreferencesDialog(SimpleNamespace(config=Config(), bar=None))
+    expected = {action for action, _label, _group, _default in HOTKEY_ACTIONS}
+    assert set(dialog.hotkey_entries) == expected
 
 
 def test_grab_and_release():

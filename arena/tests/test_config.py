@@ -28,6 +28,10 @@ def test_hotkey_defaults(monkeypatch, tmp_path):
     hotkeys = config_module.Config().get("hotkeys")
     assert "fullscreen" in hotkeys
     assert "region" in hotkeys
+    for action in ("scrolling", "delayed", "editor", "recorder", "color", "quit"):
+        assert action in hotkeys
+        assert isinstance(hotkeys[action], str)
+    assert hotkeys["fullscreen"] == "Ctrl+Alt+1"
 
 
 def test_partial_file_is_merged_with_defaults(monkeypatch, tmp_path):

@@ -75,6 +75,47 @@ def test_copy_to_clipboard(editor):
     editor._copy_clipboard()
 
 
+def test_mouse_wheel_zooms(editor, pump):
+    from types import SimpleNamespace
+
+    from gi.repository import Gdk
+
+    editor._set_zoom(1.0)
+    up = SimpleNamespace(direction=Gdk.ScrollDirection.UP)
+    assert editor._on_scroll(editor.canvas, up) is True
+    assert editor.scale > 1.0
+
+    down = SimpleNamespace(direction=Gdk.ScrollDirection.DOWN)
+    assert editor._on_scroll(editor.canvas, down) is True
+    assert editor.scale < 1.0
+
+    smooth = SimpleNamespace(
+        direction=Gdk.ScrollDirection.SMOOTH,
+        get_scroll_deltas=lambda: (False, 0.0, -0.5),
+    )
+    before = editor.scale
+    assert editor._on_scroll(editor.canvas, smooth) is True
+    assert editor.scale > before
+
+
+def test_ctrl_plus_minus_zoom(editor):
+    from types import SimpleNamespace
+
+    from gi.repository import Gdk
+
+    def key(keyval):
+        return SimpleNamespace(state=Gdk.ModifierType.CONTROL_MASK, keyval=keyval)
+
+    editor._set_zoom(1.0)
+    assert editor._on_key(editor, key(Gdk.KEY_plus)) is True
+    assert editor.scale > 1.0
+    assert editor._on_key(editor, key(Gdk.KEY_minus)) is True
+    assert editor.scale < 1.25
+    before = editor.scale
+    assert editor._on_key(editor, key(Gdk.KEY_equal)) is True
+    assert editor.scale > before
+
+
 def test_new_brush_tools(editor):
     editor._push_undo()
     editor._raster_airbrush([(10, 10), (30, 30)], 8, (255, 0, 0, 255))
