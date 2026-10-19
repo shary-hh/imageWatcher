@@ -401,8 +401,12 @@ def _capture_settled(
     return frame
 
 
-def capture_scrolling_window(max_scrolls=30):
-    """Captura una ventana larga desplazandola y empalmando con Pillow."""
+def capture_scrolling_window(max_scrolls=100):
+    """Captura una ventana larga desplazandola y empalmando con Pillow.
+
+    ``max_scrolls`` es solo un limite de seguridad: el bucle termina antes al
+    llegar al final de la pagina (cuando la rueda ya no la desplaza).
+    """
     geom = active_window_geometry()
     if geom is None:
         return capture_screen()
