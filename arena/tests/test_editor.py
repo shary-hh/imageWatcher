@@ -126,6 +126,51 @@ def test_middle_drag_pans_scrolled_image(editor, pump):
     assert editor.panning is None
 
 
+def test_move_tool_pans_with_left_button(editor, pump):
+    from types import SimpleNamespace
+
+    editor._set_zoom(2.0)
+    pump(200)
+    editor.tool = "move"
+    vadj = editor.scroller.get_vadjustment()
+    maximum = max(0.0, vadj.get_upper() - vadj.get_page_size())
+    start = min(100.0, maximum)
+    vadj.set_value(start)
+
+    press = SimpleNamespace(button=1, x=100, y=100)
+    assert editor._on_press(editor.canvas, press) is True
+    assert editor.drag is None
+    editor._on_motion(editor.canvas, SimpleNamespace(x=100, y=50))
+    assert abs(vadj.get_value() - min(start + 50.0, maximum)) < 0.01
+
+    assert editor._on_release(editor.canvas, SimpleNamespace(button=1)) is True
+    assert editor.panning is None
+
+
+def test_move_tool_keyboard_shortcut(editor):
+    from types import SimpleNamespace
+
+    from gi.repository import Gdk
+
+    editor._select_tool("pen")
+    assert editor._on_key(editor, SimpleNamespace(state=0, keyval=Gdk.KEY_h)) is True
+    assert editor.tool == "move"
+    editor._select_tool("pen")
+    assert editor._on_key(editor, SimpleNamespace(state=0, keyval=Gdk.KEY_v)) is True
+    assert editor.tool == "move"
+
+
+def test_pen_left_button_still_draws(editor):
+    from types import SimpleNamespace
+
+    editor.tool = "pen"
+    press = SimpleNamespace(button=1, x=50, y=50)
+    assert editor._on_press(editor.canvas, press) is True
+    assert editor.panning is None
+    assert editor.drag is not None
+    editor.drag = None
+
+
 def test_shift_wheel_scrolls_vertically(editor):
     from types import SimpleNamespace
 

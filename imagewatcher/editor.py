@@ -72,6 +72,7 @@ def add_drop_shadow(image, offset=14, blur=12, opacity=60):
 
 
 TOOLS = [
+    ("move", "Mover"),
     ("select", "Seleccion"),
     ("lasso", "Seleccion libre"),
     ("pen", "Lapiz"),
@@ -95,6 +96,7 @@ TOOLS = [
 ]
 
 TOOL_ICONS = {
+    "move": ("move", "Mover imagen (arrastrar con el boton izquierdo)"),
     "select": ("edit-select-all", "Seleccionar region para recortar"),
     "lasso": ("edit-select", "Seleccion a mano alzada"),
     "pen": ("draw-freehand", "Lapiz"),
@@ -344,7 +346,10 @@ class EditorWindow(Gtk.Window):
         outer.pack_start(self.font_spin, False, False, 0)
 
         hint = Gtk.Label(
-            label="Rueda: zoom  -  Shift+rueda: desplazar  -  Boton central: mover"
+            label=(
+                "Rueda: zoom  -  Shift+rueda: desplazar  -  "
+                "Herramienta Mover o boton central: arrastrar"
+            )
         )
         hint.get_style_context().add_class("dim")
         outer.pack_end(hint, False, False, 0)
@@ -456,6 +461,11 @@ class EditorWindow(Gtk.Window):
         self.queue_draw()
 
     # ================================================================== events
+    def _select_tool(self, tool_id):
+        button = self.tool_buttons.get(tool_id)
+        if button is not None:
+            button.set_active(True)
+
     def _on_tool_toggled(self, button, tool_id):
         if button.get_active():
             self.tool = tool_id
@@ -485,17 +495,20 @@ class EditorWindow(Gtk.Window):
         upper = max(lower, adjustment.get_upper() - adjustment.get_page_size())
         return max(lower, min(upper, value))
 
+    def _start_pan(self, event):
+        hadj = self.scroller.get_hadjustment()
+        vadj = self.scroller.get_vadjustment()
+        self.panning = (
+            event.x,
+            event.y,
+            hadj.get_value() if hadj is not None else 0.0,
+            vadj.get_value() if vadj is not None else 0.0,
+        )
+
     def _on_press(self, _widget, event):
         self.canvas.grab_focus()
-        if event.button == 2:
-            hadj = self.scroller.get_hadjustment()
-            vadj = self.scroller.get_vadjustment()
-            self.panning = (
-                event.x,
-                event.y,
-                hadj.get_value() if hadj is not None else 0.0,
-                vadj.get_value() if vadj is not None else 0.0,
-            )
+        if event.button == 2 or (event.button == 1 and self.tool == "move"):
+            self._start_pan(event)
             return True
         if event.button != 1:
             return False
@@ -540,7 +553,7 @@ class EditorWindow(Gtk.Window):
         return False
 
     def _on_release(self, _widget, event):
-        if self.panning and event.button == 2:
+        if self.panning and event.button in (1, 2):
             self.panning = None
             return True
         if not self.drag:
@@ -577,6 +590,14 @@ class EditorWindow(Gtk.Window):
         return True
 
     def _on_key(self, _widget, event):
+        if not event.state & (
+            Gdk.ModifierType.CONTROL_MASK
+            | Gdk.ModifierType.MOD1_MASK
+            | Gdk.ModifierType.SUPER_MASK
+        ):
+            if event.keyval in (Gdk.KEY_v, Gdk.KEY_h):
+                self._select_tool("move")
+                return True
         if event.state & Gdk.ModifierType.CONTROL_MASK:
             if event.keyval == Gdk.KEY_z:
                 self._undo()

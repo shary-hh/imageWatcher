@@ -363,6 +363,17 @@ def _draw_glyph(cr, kind, color):
         cr.curve_to(7, 19, 3, 12, 8, 9)
         cr.stroke()
         line(11, 17, 9, 21)
+    elif kind == "move":
+        line(12, 4, 12, 20)
+        line(4, 12, 20, 12)
+        line(12, 4, 9.5, 6.5)
+        line(12, 4, 14.5, 6.5)
+        line(12, 20, 9.5, 17.5)
+        line(12, 20, 14.5, 17.5)
+        line(4, 12, 6.5, 9.5)
+        line(4, 12, 6.5, 14.5)
+        line(20, 12, 17.5, 9.5)
+        line(20, 12, 17.5, 14.5)
     elif kind == "pen":
         line(8, 16, 17, 7)
         cr.move_to(5, 19)

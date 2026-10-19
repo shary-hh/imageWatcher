@@ -25,7 +25,7 @@ def test_glyphs_render():
     from imagewatcher import ui
 
     kinds = [
-        "select", "lasso", "pen", "marker", "highlighter", "airbrush", "calligraphy",
+        "move", "select", "lasso", "pen", "marker", "highlighter", "airbrush", "calligraphy",
         "line", "arrow", "rect", "ellipse", "callout", "text", "stamp", "cursor",
         "blur", "pixelate", "retouch", "eraser", "fill", "undo", "redo", "zoom-in",
         "zoom-out", "fit", "copy", "save", "display", "window", "region", "record",

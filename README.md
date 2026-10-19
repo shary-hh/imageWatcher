@@ -32,6 +32,8 @@ Python + GTK3 + Pillow + Xlib.
 - Transformaciones: rotar 90/180, voltear; recortar a seleccion; redimensionar.
 - Borde/marco, marca de agua.
 - Deshacer/rehacer, zoom, ajustar a ventana.
+- Desplazar la imagen con la herramienta **Mover** (arrastrando con el boton
+  izquierdo), con el boton central, `Shift+rueda` o las barras de scroll.
 - Guardar en PNG, JPG, BMP, GIF, PDF y copiar al portapapeles.
 
 ### Herramientas de diseno (menu en el mouse)
@@ -163,7 +165,8 @@ guia de uso y salir. Deja el campo vacio para desactivar un atajo.
 ## Atajos del editor
 `Ctrl+Z` deshacer, `Ctrl+Y` rehacer, `Ctrl+S` guardar, `Ctrl+C` copiar,
 `Ctrl+0` ajustar a ventana, `rueda` o `Ctrl++`/`Ctrl+-` zoom,
-`Shift+rueda` o barras de scroll para desplazar, boton central arrastrar = mover.
+`V`/`H` herramienta **Mover**, `Shift+rueda`, barras de scroll, boton central
+o arrastrar con la herramienta **Mover** = desplazar.
 
 ## Arena de pruebas (sandbox)
 
