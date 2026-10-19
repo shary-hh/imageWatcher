@@ -166,7 +166,7 @@ def _choose_band_offset(current, row_diffs, content_top, band_height):
     if max_offset <= content_top:
         return max(0, max_offset)
     # Reservar sitio para un paso de scroll tipico en la busqueda.
-    room = max(64, min_height // 3)
+    room = max(64, min_height // 5)
     last_offset = max(content_top, max_offset - room)
     best_offset = content_top
     best_score = -1.0
@@ -192,13 +192,23 @@ MATCH_WIDTH = 128
 MATCH_GOOD_DIFF = 2.0
 
 
-def find_vertical_shift(previous, current, band_height=24, min_shift=1, max_shift=None):
+def find_vertical_shift(
+    previous,
+    current,
+    band_height=64,
+    min_shift=1,
+    max_shift=None,
+    motion_reference=None,
+):
     """Busca en que fila de ``previous`` encaja una banda de ``current``.
 
     La banda se toma del contenido que realmente se desplaza, no de la
-    cabecera fija de la ventana. Se compara sobre una version reducida
-    horizontalmente y se puede acotar el rango con ``min_shift``/``max_shift``
-    para no recorrer toda la imagen acumulada. Devuelve ``(shift, diff)``.
+    cabecera fija de la ventana. ``motion_reference`` permite detectar ese
+    contenido comparando con el frame anterior en lugar de con la imagen
+    acumulada (asi una cabecera que cambia de estilo al hacer scroll no se
+    confunde con contenido movil). Se compara sobre una version reducida
+    horizontalmente y se puede acotar el rango con ``min_shift``/``max_shift``.
+    Devuelve ``(shift, diff)``.
     """
     band_height = min(band_height, current.height)
     width = min(previous.width, current.width)
@@ -207,7 +217,8 @@ def find_vertical_shift(previous, current, band_height=24, min_shift=1, max_shif
     match_width = max(1, min(width, MATCH_WIDTH))
     previous_small = previous.convert("RGB").resize((match_width, previous.height))
     current_small = current.convert("RGB").resize((match_width, current.height))
-    row_diffs = _row_diff_means(previous, current)
+    motion_source = previous if motion_reference is None else motion_reference
+    row_diffs = _row_diff_means(motion_source, current)
     content_top = _moving_top(row_diffs)
     content_top = max(0, min(content_top, previous.height - band_height - min_shift))
     if max_shift is None:
@@ -245,36 +256,62 @@ def find_vertical_shift(previous, current, band_height=24, min_shift=1, max_shif
     return best_seen or (0, 0.0)
 
 
+BOTTOM_GUARD = 96
+
+
+def _append_vertical(result, part):
+    if part.height <= 0:
+        return result
+    combined = Image.new(
+        "RGBA", (max(result.width, part.width), result.height + part.height), (0, 0, 0, 0)
+    )
+    combined.alpha_composite(result, (0, 0))
+    combined.alpha_composite(part, (0, result.height))
+    return combined
+
+
 def stitch_vertical(frames):
     """Une capturas verticales con solape en una sola imagen (Pillow)."""
     frames = [frame.convert("RGBA") for frame in frames if frame is not None]
     if not frames:
         return None
-    result = frames[0]
-    last_shift = 0
-    max_step = max(frame.height for frame in frames)
+    first = frames[0]
+    if len(frames) == 1:
+        return first
+    # El borde inferior del primer frame tambien puede tener un overlay fijo;
+    # se omite y se recupera del siguiente frame, igual que en los demas.
+    guard = min(BOTTOM_GUARD, max(0, first.height // 2))
+    result = first.crop((0, 0, first.width, first.height - guard))
+    previous_frame = first
+    total_shift = 0
     for frame in frames[1:]:
-        # El desplazamiento total crece de forma monotona y cada frame avanza
-        # como mucho una altura de ventana respecto al anterior.
-        shift, diff = find_vertical_shift(
-            result,
+        # Comparar solo con el frame anterior (mucho solape) evita acumular
+        # errores y que una animacion congelada en la imagen acumulada
+        # contamine las alineaciones siguientes.
+        step, diff = find_vertical_shift(
+            previous_frame,
             frame,
-            min_shift=last_shift + 1,
-            max_shift=last_shift + max_step,
+            min_shift=1,
+            max_shift=previous_frame.height,
         )
-        overlap = result.height - shift
-        if overlap < 0:
-            overlap = 0
-        new_part = frame.crop((0, min(overlap, frame.height), frame.width, frame.height))
-        if new_part.height <= 2:
-            break
-        last_shift = shift
-        combined = Image.new(
-            "RGBA", (max(result.width, frame.width), result.height + new_part.height), (0, 0, 0, 0)
-        )
-        combined.alpha_composite(result, (0, 0))
-        combined.alpha_composite(new_part, (0, result.height))
-        result = combined
+        if step <= 2:
+            previous_frame = frame
+            continue
+        total_shift += step
+        # No tomar el borde inferior de cada frame: ahi suelen vivir botones
+        # fijos ("volver arriba", chat...). Ese contenido se recupera del
+        # frame siguiente, donde ya ha subido y no esta tapado.
+        guard = min(BOTTOM_GUARD, max(0, frame.height // 2))
+        start = max(0, result.height - total_shift)
+        end = frame.height - guard
+        if end > start:
+            result = _append_vertical(result, frame.crop((0, start, frame.width, end)))
+        previous_frame = frame
+    # El ultimo trozo (incluido el borde inferior) se toma una sola vez.
+    last = frames[-1]
+    start = max(0, result.height - total_shift)
+    if start < last.height:
+        result = _append_vertical(result, last.crop((0, start, last.width, last.height)))
     return result
 
 
@@ -376,6 +413,12 @@ def capture_scrolling_window(max_scrolls=30):
             break
         frame = _capture_settled(geom, previous)
         if _mean_abs_diff(previous, frame) < SCROLL_DIFF:
+            break
+        step, _diff = find_vertical_shift(
+            previous, frame, min_shift=1, max_shift=geom.height
+        )
+        if step <= 2:
+            # La pagina ya no se desplaza; solo hay animaciones.
             break
         frames.append(frame)
     return stitch_vertical(frames)

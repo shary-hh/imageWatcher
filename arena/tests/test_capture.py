@@ -181,6 +181,28 @@ def test_stitch_skips_uniform_band_to_align():
     assert stitched.height == 540
 
 
+def test_stitch_avoids_repeating_fixed_bottom_overlay():
+    """Un boton fijo en la esquina inferior no debe repetirse en cada frame."""
+    from PIL import ImageDraw
+
+    base = _noise_image(120, 900, seed=5).convert("RGBA")
+    frames = []
+    for i in range(6):
+        frame = base.crop((0, i * 100, 120, i * 100 + 300)).copy()
+        ImageDraw.Draw(frame).rectangle((100, 280, 119, 299), fill=(255, 0, 0, 255))
+        frames.append(frame)
+
+    stitched = capture.stitch_vertical(frames)
+    assert stitched.height == 800
+    red = sum(
+        1
+        for y in range(stitched.height)
+        for x in range(stitched.width)
+        if stitched.getpixel((x, y))[:3] == (255, 0, 0)
+    )
+    assert red == 20 * 20
+
+
 def test_stitch_vertical_reconstructs_long_window():
     base = _noise_image(120, 600)
     frames = [
