@@ -16,6 +16,8 @@ APP_ID = "imagewatcher"
 APP_NAME = "imageWatcher"
 APP_CLASS = "imageWatcher"
 
+_glib_identity_set = False
+
 ACCENT = "#2f7bff"
 BG = "#1b202a"
 BG_ALT = "#232b38"
@@ -671,13 +673,16 @@ def apply_dark(window):
 
 def set_app_identity():
     """Mejora la integracion con el escritorio (WM_CLASS e icono)."""
-    try:
-        from gi.repository import GLib
+    global _glib_identity_set
+    if not _glib_identity_set:
+        try:
+            from gi.repository import GLib
 
-        GLib.set_prgname(APP_ID)
-        GLib.set_application_name(APP_NAME)
-    except Exception:
-        pass
+            GLib.set_prgname(APP_ID)
+            GLib.set_application_name(APP_NAME)
+            _glib_identity_set = True
+        except Exception:
+            pass
     try:
         Gdk.set_program_class(APP_CLASS)
     except Exception:
