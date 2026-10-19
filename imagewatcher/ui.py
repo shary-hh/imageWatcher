@@ -190,6 +190,21 @@ headerbar button:focus {{
 }}
 .imagewatcher-bar button:focus:not(:active):not(:checked) {{ background-color: transparent; }}
 
+welcomewindow {{
+    background-color: {BG};
+    color: {TEXT};
+}}
+.welcome-title {{ font-size: 26px; font-weight: 800; color: #ffffff; }}
+.welcome-subtitle {{ color: {TEXT_DIM}; font-size: 13px; }}
+.welcome-card {{
+    background-color: {BG_ALT};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+    padding: 14px;
+}}
+.welcome-card-title {{ font-weight: 700; font-size: 14px; color: #6db2ff; }}
+.welcome-text {{ color: {TEXT_DIM}; font-size: 12px; }}
+
 whiteboard > * {{ }}
 """
 

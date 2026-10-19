@@ -137,6 +137,8 @@ python3 -m imagewatcher
 ## Uso
 
 Al arrancar aparece la **barra de captura** flotante y un icono en la bandeja.
+Tambien se muestra una **pantalla de bienvenida** con las instrucciones basicas;
+puedes desactivarla con la casilla inferior o reabrirla desde *Mas > Guia de uso*.
 Puedes mover la barra arrastrandola.
 
 | Accion | Atajo por defecto |

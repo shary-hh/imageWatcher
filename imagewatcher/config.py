@@ -33,6 +33,7 @@ DEFAULTS = {
     "record_fps": 25,
     "record_audio": False,
     "theme": "system",
+    "show_welcome": True,
 }
 
 

@@ -21,6 +21,7 @@ from .recorder import open_recorder
 from .region import RegionSelector, ask_fixed_size, extract_freehand
 from .tools import color_picker, whiteboard
 from .tools.overlay import OPEN_OVERLAY_MODES, DesktopOverlay
+from .welcome import WelcomeWindow
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,7 @@ class CaptureBar(Gtk.Window):
             ("Ventana con desplazamiento", "window", lambda *_: self.app.do_capture("scrolling")),
             ("Captura con retardo", "clock", lambda *_: self.app.do_capture("delayed")),
             ("sep", None, None),
+            ("Guia de uso", None, lambda *_: self.app.show_welcome()),
             ("Preferencias", "settings", lambda *_: self.app.open_preferences()),
         ]
         for label, kind, callback in items:
@@ -238,6 +240,7 @@ class Application:
             ("sep", None),
             ("Editor de imagenes", lambda *_: self.open_editor_blank()),
             ("Grabador de pantalla", lambda *_: self.open_tool("recorder")),
+            ("Guia de uso", lambda *_: self.show_welcome()),
             ("sep", None),
         ]
         for label, callback in entries:
@@ -671,6 +674,19 @@ class Application:
     def open_preferences(self):
         PreferencesDialog(self)
 
+    def show_welcome(self):
+        existing = getattr(self, "_welcome", None)
+        if existing is not None:
+            try:
+                if existing.get_visible():
+                    existing.present()
+                    return existing
+            except Exception:
+                pass
+        self._welcome = WelcomeWindow(self)
+        self._welcome.present()
+        return self._welcome
+
     def apply_hotkeys(self):
         self.hotkeys.stop()
         self._start_hotkeys()
@@ -920,6 +936,8 @@ def main():
         logger.error("Se requiere un servidor X11 (DISPLAY no definido).")
         return 1
     app = Application()
+    if app.config.get("show_welcome", True):
+        app.show_welcome()
     try:
         Gtk.main()
     except KeyboardInterrupt:
