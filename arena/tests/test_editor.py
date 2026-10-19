@@ -81,21 +81,73 @@ def test_mouse_wheel_zooms(editor, pump):
     from gi.repository import Gdk
 
     editor._set_zoom(1.0)
-    up = SimpleNamespace(direction=Gdk.ScrollDirection.UP)
+    up = SimpleNamespace(direction=Gdk.ScrollDirection.UP, state=0)
     assert editor._on_scroll(editor.canvas, up) is True
     assert editor.scale > 1.0
 
-    down = SimpleNamespace(direction=Gdk.ScrollDirection.DOWN)
+    down = SimpleNamespace(direction=Gdk.ScrollDirection.DOWN, state=0)
     assert editor._on_scroll(editor.canvas, down) is True
     assert editor.scale < 1.0
 
     smooth = SimpleNamespace(
         direction=Gdk.ScrollDirection.SMOOTH,
+        state=0,
         get_scroll_deltas=lambda: (False, 0.0, -0.5),
     )
     before = editor.scale
     assert editor._on_scroll(editor.canvas, smooth) is True
     assert editor.scale > before
+
+
+def test_zoom_updates_scrollable_canvas(editor):
+    from imagewatcher.editor import CANVAS_MARGIN
+
+    editor._set_zoom(2.0)
+    width, height = editor.canvas.get_size_request()
+    assert width == editor.image.width * 2 + 2 * CANVAS_MARGIN
+    assert height == editor.image.height * 2 + 2 * CANVAS_MARGIN
+
+
+def test_middle_drag_pans_scrolled_image(editor, pump):
+    from types import SimpleNamespace
+
+    editor._set_zoom(2.0)
+    pump(200)
+    vadj = editor.scroller.get_vadjustment()
+    maximum = max(0.0, vadj.get_upper() - vadj.get_page_size())
+    start = min(100.0, maximum)
+    vadj.set_value(start)
+
+    press = SimpleNamespace(button=2, x=100, y=100)
+    assert editor._on_press(editor.canvas, press) is True
+    editor._on_motion(editor.canvas, SimpleNamespace(x=100, y=50))
+    assert abs(vadj.get_value() - min(start + 50.0, maximum)) < 0.01
+    assert editor._on_release(editor.canvas, SimpleNamespace(button=2)) is True
+    assert editor.panning is None
+
+
+def test_shift_wheel_scrolls_vertically(editor):
+    from types import SimpleNamespace
+
+    from gi.repository import Gdk
+
+    editor._set_zoom(2.0)
+    vadj = editor.scroller.get_vadjustment()
+    vadj.set_upper(2000)
+    vadj.set_page_size(400)
+    vadj.set_value(500)
+
+    down = SimpleNamespace(
+        direction=Gdk.ScrollDirection.DOWN, state=Gdk.ModifierType.SHIFT_MASK
+    )
+    assert editor._on_scroll(editor.canvas, down) is True
+    assert vadj.get_value() > 500
+
+    up = SimpleNamespace(
+        direction=Gdk.ScrollDirection.UP, state=Gdk.ModifierType.SHIFT_MASK
+    )
+    assert editor._on_scroll(editor.canvas, up) is True
+    assert vadj.get_value() == 500
 
 
 def test_ctrl_plus_minus_zoom(editor):

@@ -31,6 +31,7 @@ FONT_CANDIDATES_BOLD = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 ]
+CANVAS_MARGIN = 16
 
 
 def load_font(size, bold=False):
@@ -186,6 +187,7 @@ class EditorWindow(Gtk.Window):
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         scroller.add(self.canvas)
+        self.scroller = scroller
         root.pack_start(scroller, True, True, 0)
 
         self.statusbar = Gtk.Statusbar()
@@ -341,7 +343,9 @@ class EditorWindow(Gtk.Window):
         self.font_spin.connect("value-changed", self._on_font_changed)
         outer.pack_start(self.font_spin, False, False, 0)
 
-        hint = Gtk.Label(label="Rueda: zoom  -  Boton central: mover")
+        hint = Gtk.Label(
+            label="Rueda: zoom  -  Shift+rueda: desplazar  -  Boton central: mover"
+        )
         hint.get_style_context().add_class("dim")
         outer.pack_end(hint, False, False, 0)
         return outer
@@ -371,18 +375,49 @@ class EditorWindow(Gtk.Window):
         if refresh_original:
             self.original = self.image.copy()
         self._refresh_pixbuf()
+        self._update_canvas_request()
+        self._recompute_transform()
         self.queue_draw()
 
     # ================================================================== transform
+    def _viewport_size(self):
+        """Tamano visible del area de dibujo, sin contar las barras de scroll."""
+        child = self.scroller.get_child() if hasattr(self, "scroller") else None
+        if child is not None:
+            width = child.get_allocated_width()
+            height = child.get_allocated_height()
+        else:
+            width = self.canvas.get_allocated_width()
+            height = self.canvas.get_allocated_height()
+        return max(1, width), max(1, height)
+
+    def _canvas_request_size(self):
+        width = max(1, int(round(self.image.width * self.scale))) + 2 * CANVAS_MARGIN
+        height = max(1, int(round(self.image.height * self.scale))) + 2 * CANVAS_MARGIN
+        return width, height
+
+    def _update_canvas_request(self):
+        request = self._canvas_request_size()
+        if tuple(self.canvas.get_size_request()) != request:
+            self.canvas.set_size_request(*request)
+
     def _recompute_transform(self):
-        area_w = self.canvas.get_allocated_width()
-        area_h = self.canvas.get_allocated_height()
+        area_w, area_h = self._viewport_size()
         if area_w <= 1 or area_h <= 1:
             return
         if self._auto_fit:
-            self.scale = min(area_w / self.image.width, area_h / self.image.height, 1.0)
-        self.offset[0] = (area_w - self.image.width * self.scale) / 2
-        self.offset[1] = (area_h - self.image.height * self.scale) / 2
+            avail_w = max(1, area_w - 2 * CANVAS_MARGIN)
+            avail_h = max(1, area_h - 2 * CANVAS_MARGIN)
+            self.scale = max(
+                0.05,
+                min(avail_w / self.image.width, avail_h / self.image.height, 1.0),
+            )
+            self._update_canvas_request()
+        request_w, request_h = self._canvas_request_size()
+        canvas_w = max(area_w, request_w)
+        canvas_h = max(area_h, request_h)
+        self.offset[0] = (canvas_w - self.image.width * self.scale) / 2
+        self.offset[1] = (canvas_h - self.image.height * self.scale) / 2
         self._update_header()
 
     def _update_header(self):
@@ -403,18 +438,21 @@ class EditorWindow(Gtk.Window):
     def _zoom(self, factor):
         self._auto_fit = False
         self.scale = max(0.05, min(8.0, self.scale * factor))
+        self._update_canvas_request()
         self._recompute_transform()
         self.queue_draw()
 
     def _set_zoom(self, value):
         self._auto_fit = False
         self.scale = value
+        self._update_canvas_request()
         self._recompute_transform()
         self.queue_draw()
 
     def _fit_to_window(self, *_):
         self._auto_fit = True
         self._recompute_transform()
+        self._update_canvas_request()
         self.queue_draw()
 
     # ================================================================== events
@@ -441,10 +479,23 @@ class EditorWindow(Gtk.Window):
     def _on_font_changed(self, spin):
         self.font_size = int(spin.get_value())
 
+    @staticmethod
+    def _clamp_adjustment(adjustment, value):
+        lower = adjustment.get_lower()
+        upper = max(lower, adjustment.get_upper() - adjustment.get_page_size())
+        return max(lower, min(upper, value))
+
     def _on_press(self, _widget, event):
         self.canvas.grab_focus()
         if event.button == 2:
-            self.panning = (event.x, event.y, self.offset[0], self.offset[1])
+            hadj = self.scroller.get_hadjustment()
+            vadj = self.scroller.get_vadjustment()
+            self.panning = (
+                event.x,
+                event.y,
+                hadj.get_value() if hadj is not None else 0.0,
+                vadj.get_value() if vadj is not None else 0.0,
+            )
             return True
         if event.button != 1:
             return False
@@ -468,9 +519,12 @@ class EditorWindow(Gtk.Window):
         if self.panning:
             dx = event.x - self.panning[0]
             dy = event.y - self.panning[1]
-            self.offset[0] = self.panning[2] + dx
-            self.offset[1] = self.panning[3] + dy
-            self.queue_draw()
+            hadj = self.scroller.get_hadjustment()
+            vadj = self.scroller.get_vadjustment()
+            if hadj is not None:
+                hadj.set_value(self._clamp_adjustment(hadj, self.panning[2] - dx))
+            if vadj is not None:
+                vadj.set_value(self._clamp_adjustment(vadj, self.panning[3] - dy))
             return True
         if self.drag:
             x, y = self._to_image(event.x, event.y)
@@ -511,6 +565,13 @@ class EditorWindow(Gtk.Window):
             delta = 1.0
         if not delta:
             return False
+        if event.state & Gdk.ModifierType.SHIFT_MASK:
+            vadj = self.scroller.get_vadjustment()
+            if vadj is not None:
+                vadj.set_value(
+                    self._clamp_adjustment(vadj, vadj.get_value() + delta * 48.0)
+                )
+            return True
         factor = max(0.5, min(2.0, 1.0 - delta * 0.12))
         self._zoom(factor)
         return True
@@ -545,7 +606,6 @@ class EditorWindow(Gtk.Window):
         cr.set_source_rgb(0.13, 0.14, 0.16)
         cr.paint()
 
-        self._recompute_transform()
         ox, oy = self.offset
         scale = self.scale
         iw = self.image.width * scale

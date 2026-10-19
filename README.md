@@ -162,7 +162,8 @@ guia de uso y salir. Deja el campo vacio para desactivar un atajo.
 
 ## Atajos del editor
 `Ctrl+Z` deshacer, `Ctrl+Y` rehacer, `Ctrl+S` guardar, `Ctrl+C` copiar,
-`Ctrl+0` ajustar a ventana, `rueda` o `Ctrl++`/`Ctrl+-` zoom, boton central arrastrar = desplazar.
+`Ctrl+0` ajustar a ventana, `rueda` o `Ctrl++`/`Ctrl+-` zoom,
+`Shift+rueda` o barras de scroll para desplazar, boton central arrastrar = mover.
 
 ## Arena de pruebas (sandbox)
 
