@@ -15,6 +15,9 @@ def test_defaults_and_persistence(monkeypatch, tmp_path):
     assert cfg.get("show_capture_bar") is True
     assert cfg.get("snap_enabled") is True
     assert cfg.get("color_zoom") == 11
+    assert cfg.get("favorite_tools") == [
+        "color", "magnifier", "ruler", "whiteboard",
+    ]
 
     cfg["save_format"] = "jpg"
     cfg["delay_seconds"] = 7
@@ -24,6 +27,50 @@ def test_defaults_and_persistence(monkeypatch, tmp_path):
     reloaded = config_module.Config()
     assert reloaded.get("save_format") == "jpg"
     assert reloaded.get("delay_seconds") == 7
+
+
+def test_capture_bar_shows_favorite_tools(pump):
+    from imagewatcher.app import CaptureBar
+
+    class _App:
+        def favorite_tool_ids(self):
+            return ["color", "ruler"]
+
+        def open_favorite(self, tool_id):
+            pass
+
+        def do_capture(self, mode):
+            pass
+
+        def open_tool(self, name):
+            pass
+
+    bar = CaptureBar(_App())
+    try:
+        pump(120)
+        assert bar.favorites_box.get_visible()
+        assert len(bar.favorites_box.get_children()) == 2
+    finally:
+        bar.destroy()
+
+
+def test_favorite_tools_are_filtered_and_dispatched():
+    from types import SimpleNamespace
+
+    from imagewatcher.app import Application
+
+    app = SimpleNamespace(
+        config={"favorite_tools": ["color", "unknown", "color", "protractor"]}
+    )
+    assert Application.favorite_tool_ids(app) == ["color", "protractor"]
+
+    calls = []
+    app.open_tool = lambda name: calls.append(("tool", name))
+    app.open_editor_blank = lambda: calls.append(("editor",))
+    Application.open_favorite(app, "color")
+    Application.open_favorite(app, "editor")
+    Application.open_favorite(app, "unknown")
+    assert calls == [("tool", "color"), ("editor",)]
 
 
 def test_color_history_uses_selected_format():

@@ -24,6 +24,7 @@ DEFAULTS = {
     "fixed_region_size": [360, 360],
     "hotkeys": dict(HOTKEY_DEFAULTS),
     "hotkeys_enabled": True,
+    "favorite_tools": ["color", "magnifier", "ruler", "whiteboard"],
     "color_format": "hex",
     "color_zoom": 11,
     "color_history": [],

@@ -26,6 +26,20 @@ from .welcome import WelcomeWindow
 
 logger = logging.getLogger(__name__)
 
+FAVORITE_TOOLS = [
+    ("editor", "Editor de imagenes", "pen"),
+    ("recorder", "Grabador de pantalla", "record"),
+    ("color", "Selector de color", "color"),
+    ("magnifier", "Lupa", "zoom-in"),
+    ("ruler", "Regla de pixeles", "ruler"),
+    ("crosshair", "Punto de mira", "crosshair"),
+    ("protractor", "Transportador", "protractor"),
+    ("whiteboard", "Pizarra", "pen"),
+]
+FAVORITE_TOOL_MAP = {
+    tool_id: (label, kind) for tool_id, label, kind in FAVORITE_TOOLS
+}
+
 
 class CaptureBar(Gtk.Window):
     def __init__(self, app):
@@ -64,6 +78,11 @@ class CaptureBar(Gtk.Window):
         ]:
             box.pack_start(ui.glyph_tile(kind, label, tooltip, callback), False, False, 0)
 
+        self.favorites_sep = self._separator()
+        box.pack_start(self.favorites_sep, False, False, 0)
+        self.favorites_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        box.pack_start(self.favorites_box, False, False, 0)
+
         box.pack_start(self._separator(), False, False, 0)
         box.pack_start(self._more_button(), False, False, 0)
 
@@ -76,6 +95,7 @@ class CaptureBar(Gtk.Window):
         self.connect("delete-event", lambda *args: (self.hide(), True)[1])
 
         self.show_all()
+        self._refresh_favorites()
         self._place()
 
     def _brand(self):
@@ -98,6 +118,28 @@ class CaptureBar(Gtk.Window):
 
     def _separator(self):
         return Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+
+    def _refresh_favorites(self):
+        for child in self.favorites_box.get_children():
+            child.destroy()
+        ids = self.app.favorite_tool_ids()
+        for tool_id in ids:
+            label, kind = FAVORITE_TOOL_MAP[tool_id]
+            self.favorites_box.pack_start(
+                ui.glyph_button(
+                    kind,
+                    f"Favorito: {label}",
+                    on_click=lambda *_, t=tool_id: self.app.open_favorite(t),
+                    size=18,
+                ),
+                False,
+                False,
+                0,
+            )
+        visible = bool(ids)
+        self.favorites_sep.set_visible(visible)
+        self.favorites_box.set_visible(visible)
+        self.favorites_box.show_all()
 
     def _more_button(self):
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -270,6 +312,7 @@ class Application:
             submenu.append(sub)
         tools.set_submenu(submenu)
         menu.append(tools)
+        menu.append(self._favorites_menu())
         menu.append(self._color_history_menu())
         menu.append(self._color_format_menu())
         hide_overlays = Gtk.MenuItem(label="Ocultar superposiciones")
@@ -535,6 +578,47 @@ class Application:
             return self._toggle_overlay(name)
         return None
 
+    def favorite_tool_ids(self):
+        valid = set(FAVORITE_TOOL_MAP)
+        result = []
+        seen = set()
+        for tool_id in self.config.get("favorite_tools", []):
+            if tool_id in valid and tool_id not in seen:
+                seen.add(tool_id)
+                result.append(tool_id)
+        return result
+
+    def open_favorite(self, tool_id):
+        if tool_id == "editor":
+            self.open_editor_blank()
+        elif tool_id in FAVORITE_TOOL_MAP:
+            self.open_tool(tool_id)
+
+    def _favorites_menu(self):
+        item = Gtk.MenuItem(label="Favoritos")
+        submenu = Gtk.Menu()
+        ids = self.favorite_tool_ids()
+        if not ids:
+            empty = Gtk.MenuItem(label="(sin favoritos)")
+            empty.set_sensitive(False)
+            submenu.append(empty)
+        else:
+            for tool_id in ids:
+                label, kind = FAVORITE_TOOL_MAP[tool_id]
+                submenu.append(
+                    ui.menu_item(
+                        label,
+                        kind,
+                        lambda *_, t=tool_id: self.open_favorite(t),
+                    )
+                )
+        submenu.append(Gtk.SeparatorMenuItem())
+        manage = Gtk.MenuItem(label="Configurar favoritos...")
+        manage.connect("activate", lambda *_: self.open_preferences())
+        submenu.append(manage)
+        item.set_submenu(submenu)
+        return item
+
     # -------------------------------------------------------- overlays (mouse)
     def _toggle_overlay(self, mode):
         overlay = self._overlays.get(mode)
@@ -599,6 +683,8 @@ class Application:
         for label, kind, callback in entries:
             menu.append(ui.menu_item(label, kind, lambda *_, cb=callback: cb()))
 
+        menu.append(Gtk.SeparatorMenuItem())
+        menu.append(self._favorites_menu())
         menu.append(self._color_history_menu())
         menu.append(self._color_format_menu())
 
@@ -793,6 +879,7 @@ class PreferencesDialog(Gtk.Dialog):
         notebook.append_page(self._general_page(), Gtk.Label(label="General"))
         notebook.append_page(self._save_page(), Gtk.Label(label="Guardado"))
         notebook.append_page(self._hotkeys_page(), Gtk.Label(label="Atajos"))
+        notebook.append_page(self._favorites_page(), Gtk.Label(label="Favoritos"))
         notebook.append_page(self._record_page(), Gtk.Label(label="Grabacion"))
 
         self.show_all()
@@ -958,6 +1045,31 @@ class PreferencesDialog(Gtk.Dialog):
         box.pack_start(scroller, True, True, 0)
         return box
 
+    def _favorites_page(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        box.set_margin_top(12)
+        box.set_border_width(8)
+
+        description = Gtk.Label(
+            label=(
+                "Herramientas que aparecen en la barra de captura y en el "
+                "menu Favoritos."
+            ),
+            xalign=0,
+        )
+        description.set_line_wrap(True)
+        box.pack_start(description, False, False, 0)
+        self.favorite_checks = {}
+        selected = set(self.config.get("favorite_tools", []))
+        for tool_id, label, _kind in FAVORITE_TOOLS:
+            check = Gtk.CheckButton(label=label)
+            check.set_active(tool_id in selected)
+            box.pack_start(check, False, False, 0)
+            self.favorite_checks[tool_id] = check
+        return box
+
     def _record_page(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         box.set_margin_start(12)
@@ -996,10 +1108,19 @@ class PreferencesDialog(Gtk.Dialog):
             self.config.data["hotkeys"][key] = entry.get_text().strip()
         self.config["record_fps"] = int(self.fps_spin.get_value())
         self.config["record_audio"] = self.audio_check.get_active()
+        self.config["favorite_tools"] = [
+            tool_id
+            for tool_id, _label, _kind in FAVORITE_TOOLS
+            if self.favorite_checks[tool_id].get_active()
+        ]
         self.config.save()
         self._set_autostart(self.autostart_check.get_active())
         self.app.apply_hotkeys()
         self.app._apply_bar_preference()
+        bar = getattr(self.app, "bar", None)
+        if bar is not None:
+            bar._refresh_favorites()
+        self.app._refresh_tray_menu()
 
     def _autostart_path(self):
         return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "autostart" / f"{__app_id__}.desktop"

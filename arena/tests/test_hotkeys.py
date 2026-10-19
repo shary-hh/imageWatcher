@@ -48,6 +48,9 @@ def test_preferences_lists_every_hotkey_action(monkeypatch, tmp_path):
     assert dialog.show_bar_check.get_active() is True
     assert dialog.snap_check.get_active() is True
     assert dialog.color_zoom_spin.get_value() == 11
+    assert dialog.favorite_checks["color"].get_active() is True
+    assert dialog.favorite_checks["magnifier"].get_active() is True
+    assert dialog.favorite_checks["protractor"].get_active() is False
 
 
 def test_grab_and_release():
