@@ -438,9 +438,8 @@ class RegionSelector(Gtk.Window):
                 found = None
                 for candidate in reversed(result):
                     try:
-                        coords = candidate.translate_coords(root, 0, 0)
+                        cx, cy = capture._root_coords(candidate, root)
                         geom = candidate.get_geometry()
-                        cx, cy = coords.x, coords.y
                         if cx <= x < cx + geom.width and cy <= y < cy + geom.height:
                             found = candidate
                             break
@@ -454,9 +453,9 @@ class RegionSelector(Gtk.Window):
                         break
                 except Exception:
                     break
-            coords = child.translate_coords(root, 0, 0)
+            cx, cy = capture._root_coords(child, root)
             geom = child.get_geometry()
-            return (coords.x, coords.y, geom.width, geom.height)
+            return (cx, cy, geom.width, geom.height)
         except Exception:
             return None
 

@@ -50,6 +50,38 @@ def test_capture_window_and_listing():
     assert isinstance(capture.list_windows(), list)
 
 
+def test_window_coordinates_are_not_inverted():
+    """La geometria de una ventana debe ser su posicion real en la raiz.
+
+    ``translate_coords`` traduce desde su primer argumento hacia la ventana
+    receptora; llamarlo en la ventana pasando la raiz devuelve la posicion con
+    signo cambiado y la captura acaba tomando una region fuera de la ventana.
+    """
+    from Xlib import X, display
+
+    xdisplay = display.Display()
+    root = xdisplay.screen().root
+    win = root.create_window(
+        123,
+        87,
+        40,
+        30,
+        0,
+        xdisplay.screen().root_depth,
+        X.InputOutput,
+        X.CopyFromParent,
+        override_redirect=True,
+        background_pixel=xdisplay.screen().white_pixel,
+    )
+    try:
+        xdisplay.sync()
+        assert capture._root_coords(win, root) == (123, 87)
+    finally:
+        win.destroy()
+        xdisplay.sync()
+        xdisplay.close()
+
+
 def test_pixbuf_roundtrip():
     base = capture.capture_screen()
     back = pixbuf_to_pil(pil_to_pixbuf(base))

@@ -203,6 +203,17 @@ def _x11_display():
     return _display_cache
 
 
+def _root_coords(window, root):
+    """Coordenadas absolutas de ``window`` respecto a la raiz.
+
+    ``Window.translate_coords`` traduce *desde* el primer argumento *hacia* la
+    ventana sobre la que se invoca, por lo que hay que llamarlo en ``root``
+    pasando la ventana: al reves devuelve la posicion con signo cambiado.
+    """
+    coords = root.translate_coords(window, 0, 0)
+    return coords.x, coords.y
+
+
 def active_window_geometry():
     """Geometria (x, y, w, h) de la ventana activa incluyendo marco."""
     try:
@@ -218,9 +229,8 @@ def active_window_geometry():
         if win_id in (0, 1):
             return None
         win = d.create_resource_object("window", win_id)
-        coords = win.translate_coords(root, 0, 0)
+        x, y = _root_coords(win, root)
         geom = win.get_geometry()
-        x, y = coords.x, coords.y
         w, h = geom.width, geom.height
         frame = win.get_full_property(d.intern_atom("_NET_FRAME_EXTENTS"), X.AnyPropertyType)
         if frame and len(frame.value) >= 4:
@@ -249,7 +259,7 @@ def list_windows():
         for win_id in prop.value:
             try:
                 win = d.create_resource_object("window", win_id)
-                coords = win.translate_coords(root, 0, 0)
+                x, y = _root_coords(win, root)
                 geom = win.get_geometry()
                 name_prop = win.get_full_property(d.intern_atom("_NET_WM_NAME"), 0)
                 title = ""
@@ -257,9 +267,7 @@ def list_windows():
                     title = name_prop.value
                     if isinstance(title, bytes):
                         title = title.decode("utf-8", "replace")
-                windows.append(
-                    Geometry(coords.x, coords.y, geom.width, geom.height)
-                )
+                windows.append(Geometry(x, y, geom.width, geom.height))
                 windows[-1].title = title
             except Exception:
                 continue
