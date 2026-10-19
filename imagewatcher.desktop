@@ -2,8 +2,7 @@
 Type=Application
 Name=imageWatcher
 Comment=Captura, edita y comparte la pantalla
-Exec=python3 -m imagewatcher
-Path=/home/sharyloki/picpick__
+Exec=imagewatcher
 Icon=accessories-screenshot
 Terminal=false
 Categories=Utility;Graphics;
