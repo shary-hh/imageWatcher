@@ -14,7 +14,8 @@ def test_actions_registry_is_complete():
         "fullscreen", "window", "region", "fixed", "freehand", "scrolling",
         "delayed", "monitor", "repeat", "editor", "recorder", "color",
         "magnifier", "ruler", "crosshair", "protractor", "whiteboard",
-        "hide_overlays", "preferences", "welcome", "show_bar", "hide_bar", "quit",
+        "hide_overlays", "favorites", "preferences", "welcome", "show_bar",
+        "hide_bar", "quit",
     ):
         assert action in HOTKEY_DEFAULTS
 

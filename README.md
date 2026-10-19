@@ -73,8 +73,9 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 ### Integracion
 - Barra de captura flotante (se puede ocultar desde Preferencias, la bandeja
   o un atajo global).
-- Seccion de **herramientas favoritas** en la barra y en el menu *Favoritos*,
-  configurable en **Preferencias > Favoritos**.
+- Seccion de **herramientas favoritas** en la barra (boton de estrella e iconos),
+  al inicio de los menus de bandeja/herramientas y con **atajo global**
+  configurable. Se eligen en **Preferencias > Favoritos**.
 - Icono en la bandeja del sistema.
 - Atajos de teclado globales (X11) configurables para capturas, editor,
   grabador, herramientas de diseno y acciones de la aplicacion.

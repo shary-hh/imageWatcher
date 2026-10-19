@@ -78,6 +78,17 @@ class CaptureBar(Gtk.Window):
         ]:
             box.pack_start(ui.glyph_tile(kind, label, tooltip, callback), False, False, 0)
 
+        box.pack_start(
+            ui.button(
+                icon_name="emblem-favorite",
+                tooltip="Herramientas favoritas",
+                on_click=lambda *_: app.open_favorites_menu(),
+            ),
+            False,
+            False,
+            0,
+        )
+
         self.favorites_sep = self._separator()
         box.pack_start(self.favorites_sep, False, False, 0)
         self.favorites_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
@@ -297,6 +308,9 @@ class Application:
             item = Gtk.MenuItem(label=label)
             item.connect("activate", callback)
             menu.append(item)
+        # Favoritos siempre en la parte superior del menu.
+        menu.prepend(Gtk.SeparatorMenuItem())
+        menu.prepend(self._favorites_menu())
         tools = Gtk.MenuItem(label="Herramientas de diseno")
         submenu = Gtk.Menu()
         for label, callback in [
@@ -312,7 +326,6 @@ class Application:
             submenu.append(sub)
         tools.set_submenu(submenu)
         menu.append(tools)
-        menu.append(self._favorites_menu())
         menu.append(self._color_history_menu())
         menu.append(self._color_format_menu())
         hide_overlays = Gtk.MenuItem(label="Ocultar superposiciones")
@@ -354,6 +367,7 @@ class Application:
                 "protractor": lambda: self.open_tool("protractor"),
                 "whiteboard": lambda: self.open_tool("whiteboard"),
                 "hide_overlays": self._hide_overlays,
+                "favorites": self.open_favorites_menu,
                 "preferences": self.open_preferences,
                 "welcome": self.show_welcome,
                 "show_bar": lambda: self._set_bar_visible(True, force=True),
@@ -619,6 +633,30 @@ class Application:
         item.set_submenu(submenu)
         return item
 
+    def open_favorites_menu(self):
+        """Abre las herramientas favoritas en la posicion del raton."""
+        item = self._favorites_menu()
+        menu = item.get_submenu()
+        menu.show_all()
+        try:
+            _, x, y = (
+                Gdk.Display.get_default()
+                .get_default_seat()
+                .get_pointer()
+                .get_position()
+            )
+            menu.popup(
+                None,
+                None,
+                lambda *args: (int(x), int(y), True),
+                None,
+                0,
+                Gtk.get_current_event_time(),
+            )
+        except Exception:
+            menu.popup_at_pointer(None)
+        return menu
+
     # -------------------------------------------------------- overlays (mouse)
     def _toggle_overlay(self, mode):
         overlay = self._overlays.get(mode)
@@ -672,6 +710,8 @@ class Application:
     def open_tools_menu(self):
         """Muestra el menu de herramientas en la posicion del mouse."""
         menu = Gtk.Menu()
+        menu.append(self._favorites_menu())
+        menu.append(Gtk.SeparatorMenuItem())
         entries = [
             ("Selector de color (lupa)", "color", lambda: self.open_tool("color")),
             ("Lupa", "zoom-in", lambda: self.open_tool("magnifier")),
@@ -684,7 +724,6 @@ class Application:
             menu.append(ui.menu_item(label, kind, lambda *_, cb=callback: cb()))
 
         menu.append(Gtk.SeparatorMenuItem())
-        menu.append(self._favorites_menu())
         menu.append(self._color_history_menu())
         menu.append(self._color_format_menu())
 

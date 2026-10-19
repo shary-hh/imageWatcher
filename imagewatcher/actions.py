@@ -26,6 +26,7 @@ HOTKEY_ACTIONS = [
     ("whiteboard", "Pizarra", "Editor y herramientas", ""),
     ("hide_overlays", "Ocultar superposiciones", "Editor y herramientas", ""),
     # Aplicacion
+    ("favorites", "Abrir herramientas favoritas", "Aplicacion", ""),
     ("preferences", "Preferencias", "Aplicacion", ""),
     ("welcome", "Guia de uso", "Aplicacion", ""),
     ("show_bar", "Mostrar barra de captura", "Aplicacion", ""),
