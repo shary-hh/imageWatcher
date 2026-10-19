@@ -128,7 +128,6 @@ class ColorLoupe(Gtk.Window):
         self.connect("destroy", lambda *_: self.stop())
 
         self.show_all()
-        self.fullscreen()
         self.present()
         GLib.timeout_add(40, self._grab)
         self.start()
