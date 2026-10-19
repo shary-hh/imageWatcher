@@ -1368,6 +1368,10 @@ class EditorWindow(Gtk.Window):
         dialog.destroy()
 
     def _on_delete(self, *_):
+        share_server = getattr(self, "_share", None)
+        if share_server is not None:
+            share_server.stop()
+            self._share = None
         return False
 
     def _rgba_from_tuple(self, color):
