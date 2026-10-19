@@ -118,6 +118,22 @@ class DesktopOverlay(Gtk.Window):
         except Exception:
             pass
 
+    def _make_interactive(self):
+        """Restaura la entrada normal (una capa anterior pudo dejarla pasante)."""
+        try:
+            import cairo
+
+            window = self.get_window()
+            if window is not None:
+                width = self.get_allocated_width() or window.get_width()
+                height = self.get_allocated_height() or window.get_height()
+                region = cairo.Region(
+                    cairo.RectangleInt(0, 0, max(1, width), max(1, height))
+                )
+                window.input_shape_combine_region(region, 0, 0)
+        except Exception:
+            pass
+
     def reset(self):
         """Limpia la medicion anterior y refresca los imanes."""
         self.anchor = None

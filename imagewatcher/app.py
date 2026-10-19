@@ -547,7 +547,11 @@ class Application:
             overlay.set_mode(mode)
             overlay.reset()
             overlay.show_all()
-            overlay._make_click_through()
+            if overlay.interactive:
+                overlay._make_interactive()
+                GLib.timeout_add(60, overlay._grab_focus)
+            else:
+                overlay._make_click_through()
             overlay.start()
         self._sync_escape_grab()
         return overlay

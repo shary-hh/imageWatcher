@@ -71,6 +71,52 @@ def test_desktop_overlay_fullscreen_and_click_through(pump, mode):
     assert overlay not in Gtk.Window.list_toplevels()
 
 
+def test_reused_interactive_overlay_keeps_receiving_clicks():
+    from types import SimpleNamespace
+
+    from imagewatcher.app import Application
+
+    class _Overlay:
+        interactive = True
+
+        def __init__(self):
+            self.calls = []
+
+        def get_visible(self):
+            return False
+
+        def set_mode(self, mode):
+            self.calls.append(("mode", mode))
+
+        def reset(self):
+            self.calls.append("reset")
+
+        def show_all(self):
+            self.calls.append("show")
+
+        def _make_click_through(self):
+            self.calls.append("click_through")
+
+        def _make_interactive(self):
+            self.calls.append("interactive")
+
+        def _grab_focus(self):
+            self.calls.append("focus")
+            return False
+
+        def start(self):
+            self.calls.append("start")
+
+    overlay = _Overlay()
+    app = SimpleNamespace(
+        _overlays={"crosshair": overlay}, _sync_escape_grab=lambda: None
+    )
+    assert Application._toggle_overlay(app, "crosshair") is overlay
+    assert "reset" in overlay.calls
+    assert "interactive" in overlay.calls
+    assert "click_through" not in overlay.calls
+
+
 def test_color_loupe_picks_from_frozen_screen(pump):
     picked = {}
     loupe = color_picker.ColorLoupe(lambda rgb, hexv: picked.update(rgb=rgb, hex=hexv))
