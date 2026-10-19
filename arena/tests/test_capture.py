@@ -163,6 +163,24 @@ def test_scroll_stitch_ignores_static_header():
     assert stitched.height == 640
 
 
+def test_stitch_skips_uniform_band_to_align():
+    """Un fondo liso no debe confundir la alineacion; se usa una banda con textura."""
+    from PIL import Image
+
+    header = _noise_image(120, 80, seed=3)
+    content = Image.new("RGB", (120, 620), (40, 120, 60))
+    content.paste(_noise_image(120, 440, seed=9), (0, 180))
+    frame1 = Image.new("RGB", (120, 400))
+    frame1.paste(header, (0, 0))
+    frame1.paste(content.crop((0, 0, 120, 320)), (0, 80))
+    frame2 = Image.new("RGB", (120, 400))
+    frame2.paste(header, (0, 0))
+    frame2.paste(content.crop((0, 140, 120, 460)), (0, 80))
+
+    stitched = capture.stitch_vertical([frame1, frame2])
+    assert stitched.height == 540
+
+
 def test_stitch_vertical_reconstructs_long_window():
     base = _noise_image(120, 600)
     frames = [

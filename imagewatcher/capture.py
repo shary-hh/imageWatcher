@@ -135,15 +135,10 @@ def _row_diff_means(previous, current, sample_width=ROW_SAMPLE_WIDTH):
     ]
 
 
-def _scrolling_content_top(previous, current):
-    """Primera fila de contenido que se mueve entre dos capturas.
-
-    Las barras de pestañas/direccion del navegador y las cabeceras fijas no
-    cambian al hacer scroll. Tomar la banda de alineacion desde ahi haria que
-    cada frame coincidiera consigo mismo (shift 0) y no se empalmara nada.
-    """
+def _moving_top(row_diffs):
+    """Primera fila de una racha de filas que cambian entre dos capturas."""
     run = 0
-    for y, value in enumerate(_row_diff_means(previous, current)):
+    for y, value in enumerate(row_diffs):
         if value > STATIC_ROW_THRESHOLD:
             run += 1
             if run >= STATIC_ROW_RUN:
@@ -153,29 +148,101 @@ def _scrolling_content_top(previous, current):
     return 0
 
 
-def find_vertical_shift(previous, current, band_height=24, min_shift=1):
+def _band_detail(image, offset, band_height):
+    """Desviacion tipica de una banda: mide si tiene textura o es lisa."""
+    band = image.convert("L").crop((0, offset, image.width, offset + band_height))
+    stat = ImageStat.Stat(band)
+    return stat.stddev[0] if stat.stddev else 0.0
+
+
+def _choose_band_offset(current, row_diffs, content_top, band_height):
+    """Elige una banda movil con textura para que el empalme no sea ambiguo.
+
+    Sobre fondos de un solo color muchas filas coinciden con cualquier
+    desplazamiento. Un trozo con texto/imagenes hace unica la coincidencia.
+    """
+    min_height = min(len(row_diffs), current.height)
+    max_offset = min_height - band_height
+    if max_offset <= content_top:
+        return max(0, max_offset)
+    # Reservar sitio para un paso de scroll tipico en la busqueda.
+    room = max(64, min_height // 3)
+    last_offset = max(content_top, max_offset - room)
+    best_offset = content_top
+    best_score = -1.0
+    offsets = list(range(content_top, last_offset + 1, 8))
+    for offset in offsets:
+        detail = _band_detail(current, offset, band_height)
+        movement = sum(row_diffs[offset : offset + band_height]) / band_height
+        score = detail * movement
+        if score > best_score:
+            best_score = score
+            best_offset = offset
+    for offset in range(max(content_top, best_offset - 8), min(last_offset, best_offset + 8) + 1):
+        detail = _band_detail(current, offset, band_height)
+        movement = sum(row_diffs[offset : offset + band_height]) / band_height
+        score = detail * movement
+        if score > best_score:
+            best_score = score
+            best_offset = offset
+    return best_offset
+
+
+MATCH_WIDTH = 128
+MATCH_GOOD_DIFF = 2.0
+
+
+def find_vertical_shift(previous, current, band_height=24, min_shift=1, max_shift=None):
     """Busca en que fila de ``previous`` encaja una banda de ``current``.
 
     La banda se toma del contenido que realmente se desplaza, no de la
-    cabecera fija de la ventana. Devuelve ``(shift, diff)``.
+    cabecera fija de la ventana. Se compara sobre una version reducida
+    horizontalmente y se puede acotar el rango con ``min_shift``/``max_shift``
+    para no recorrer toda la imagen acumulada. Devuelve ``(shift, diff)``.
     """
     band_height = min(band_height, current.height)
     width = min(previous.width, current.width)
-    offset = _scrolling_content_top(previous, current)
-    offset = max(0, min(offset, previous.height - band_height - min_shift))
-    band = current.convert("RGB").crop((0, offset, width, offset + band_height))
-    best_shift = 0
-    best_diff = None
-    last = previous.height - band_height
-    for shift in range(min_shift, max(min_shift, last) + 1):
-        top = offset + shift
-        if top + band_height > previous.height:
-            break
-        window = previous.convert("RGB").crop((0, top, width, top + band_height))
-        diff = _mean_abs_diff(band, window)
-        if best_diff is None or diff < best_diff:
-            best_diff, best_shift = diff, shift
-    return best_shift, (best_diff or 0.0)
+    if width <= 0 or band_height <= 0:
+        return 0, 0.0
+    match_width = max(1, min(width, MATCH_WIDTH))
+    previous_small = previous.convert("RGB").resize((match_width, previous.height))
+    current_small = current.convert("RGB").resize((match_width, current.height))
+    row_diffs = _row_diff_means(previous, current)
+    content_top = _moving_top(row_diffs)
+    content_top = max(0, min(content_top, previous.height - band_height - min_shift))
+    if max_shift is None:
+        offsets = [content_top]
+    else:
+        detailed = _choose_band_offset(current_small, row_diffs, content_top, band_height)
+        offsets = [detailed]
+        if detailed != content_top:
+            # Si la banda con textura no acota bien (fondo liso o paso
+            # grande), reintentar con la banda mas alta para tener mas rango.
+            offsets.append(content_top)
+
+    best_seen = None
+    for offset in offsets:
+        offset = max(0, min(offset, previous.height - band_height - min_shift))
+        band = current_small.crop((0, offset, match_width, offset + band_height))
+        max_allowed = previous.height - band_height - offset
+        limit = max_allowed if max_shift is None else min(max_shift, max_allowed)
+        if limit < min_shift:
+            continue
+        best_shift = 0
+        best_diff = None
+        for shift in range(min_shift, limit + 1):
+            top = offset + shift
+            window = previous_small.crop((0, top, match_width, top + band_height))
+            diff = _mean_abs_diff(band, window)
+            if best_diff is None or diff < best_diff:
+                best_diff, best_shift = diff, shift
+        if best_diff is None:
+            continue
+        if best_seen is None or best_diff < best_seen[1]:
+            best_seen = (best_shift, best_diff)
+        if best_diff <= MATCH_GOOD_DIFF:
+            return best_shift, best_diff
+    return best_seen or (0, 0.0)
 
 
 def stitch_vertical(frames):
@@ -184,14 +251,24 @@ def stitch_vertical(frames):
     if not frames:
         return None
     result = frames[0]
+    last_shift = 0
+    max_step = max(frame.height for frame in frames)
     for frame in frames[1:]:
-        shift, diff = find_vertical_shift(result, frame)
+        # El desplazamiento total crece de forma monotona y cada frame avanza
+        # como mucho una altura de ventana respecto al anterior.
+        shift, diff = find_vertical_shift(
+            result,
+            frame,
+            min_shift=last_shift + 1,
+            max_shift=last_shift + max_step,
+        )
         overlap = result.height - shift
         if overlap < 0:
             overlap = 0
         new_part = frame.crop((0, min(overlap, frame.height), frame.width, frame.height))
         if new_part.height <= 2:
             break
+        last_shift = shift
         combined = Image.new(
             "RGBA", (max(result.width, frame.width), result.height + new_part.height), (0, 0, 0, 0)
         )
@@ -246,15 +323,43 @@ def _scroll_active_window(times=1, geom=None):
         return False
 
 
-def _capture_settled(geometry, timeout=0.6, interval=0.06):
-    """Captura esperando a que el contenido deje de moverse tras el scroll."""
-    deadline = time.monotonic() + timeout
-    frame = capture_region(*geometry.as_tuple())
+def _capture_settled(
+    geometry,
+    baseline,
+    start_timeout=1.0,
+    settle_timeout=1.0,
+    interval=0.08,
+    required_stable=3,
+):
+    """Captura tras el scroll esperando a que empiece y termine el movimiento.
+
+    Los navegadores hacen scroll suave: al enviar la rueda el contenido puede
+    tardar en empezar a moverse. Comparar dos capturas seguidas nada mas
+    soltar la rueda devolvia el frame previo (sin scroll) y la captura se
+    quedaba con la parte visible. Primero se espera a detectar movimiento y
+    despues a que varias capturas seguidas sean estables.
+    """
+    start = time.monotonic()
+    deadline = start + start_timeout + settle_timeout
+    frame = baseline
+    moved = False
+    stable = 0
     while time.monotonic() < deadline:
         time.sleep(interval)
         next_frame = capture_region(*geometry.as_tuple())
-        if _mean_abs_diff(frame, next_frame) < SCROLL_DIFF:
-            return next_frame
+        diff = _mean_abs_diff(frame, next_frame)
+        if not moved:
+            if _mean_abs_diff(baseline, next_frame) >= SCROLL_DIFF:
+                moved = True
+                stable = 0
+            elif time.monotonic() - start >= start_timeout:
+                return next_frame
+        elif diff < SCROLL_DIFF:
+            stable += 1
+            if stable >= required_stable:
+                return next_frame
+        else:
+            stable = 0
         frame = next_frame
     return frame
 
@@ -269,7 +374,7 @@ def capture_scrolling_window(max_scrolls=30):
         previous = frames[-1]
         if not _scroll_active_window(1, geom=geom):
             break
-        frame = _capture_settled(geom)
+        frame = _capture_settled(geom, previous)
         if _mean_abs_diff(previous, frame) < SCROLL_DIFF:
             break
         frames.append(frame)
