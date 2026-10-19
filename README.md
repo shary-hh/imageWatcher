@@ -51,8 +51,10 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
   **historial de colores** (16) que aparece en la lupa y en el menu
   (*Historial de colores*, clic para recopiar; opcion de limpiarlo).
 - **Lupa** que sigue al cursor.
-- **Punto de mira**: clic en una esquina y clic en la opuesta para medir el
-  rectangulo; muestra **Ancho x Alto (px)** y copia las medidas al cerrar.
+- **Punto de mira**: arrastra desde cualquier punto o haz clic en dos esquinas
+  para medir el rectangulo; muestra **Ancho x Alto (px)** y copia las medidas al
+  cerrar. Tiene **imanes** que acoplan la seleccion a bordes de ventanas,
+  bordes de pantalla y lineas de texto/UI.
 - **Regla de pixeles**: clic en el origen y clic en el destino para medir la
   distancia (linea con marcas, en **px/cm** y `dx`/`dy`). Se copia y cierra.
 - **Transportador**: clic en el vertice y clic en el primer brazo, y el angulo sigue

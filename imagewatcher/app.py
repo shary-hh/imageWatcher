@@ -545,6 +545,7 @@ class Application:
             self._overlays[mode] = overlay
         else:
             overlay.set_mode(mode)
+            overlay.reset()
             overlay.show_all()
             overlay._make_click_through()
             overlay.start()

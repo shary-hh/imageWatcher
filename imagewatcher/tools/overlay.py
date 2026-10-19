@@ -12,14 +12,23 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
-from PIL import Image  # noqa: E402
+from PIL import Image, ImageFilter  # noqa: E402
 
 from .. import ui  # noqa: E402
-from ..capture import capture_region, virtual_screen_size  # noqa: E402
+from ..capture import (
+    capture_region,
+    capture_screen,
+    list_windows,
+    virtual_screen_size,
+)  # noqa: E402
 from ..gtk_util import get_pointer_position  # noqa: E402
 
 # Modos que se dibujan sobre el escritorio (overlay click-through).
 OPEN_OVERLAY_MODES = ("magnifier", "ruler", "crosshair", "protractor")
+
+SNAP_DISTANCE = 12
+SNAP_EDGE_LINES = 32
+SNAP_EDGE_WIDTH = 480
 
 
 def _enable_transparency(window):
@@ -47,6 +56,9 @@ class DesktopOverlay(Gtk.Window):
         self._mag_half = 10
         self._timer = None
         self._last_pos = None
+        self._snapshot = None
+        self._snap_x = []
+        self._snap_y = []
 
         self.set_decorated(False)
         self.set_keep_above(True)
@@ -78,6 +90,7 @@ class DesktopOverlay(Gtk.Window):
 
         self.connect("map", lambda *_: self.start())
         self.connect("unmap", lambda *_: self.stop())
+        self.reset()
         self.show_all()
         if self.interactive:
             GLib.timeout_add(60, self._grab_focus)
@@ -105,15 +118,114 @@ class DesktopOverlay(Gtk.Window):
         except Exception:
             pass
 
+    def reset(self):
+        """Limpia la medicion anterior y refresca los imanes."""
+        self.anchor = None
+        self.points = []
+        self._dragging = False
+        self._drag_origin = None
+        self._flash = None
+        self.pointer = get_pointer_position()
+        self._last_pos = None
+        if self.mode == "crosshair":
+            try:
+                self._snapshot = capture_screen()
+            except Exception:
+                self._snapshot = None
+            self._build_snap_lines()
+        else:
+            self._snap_x = []
+            self._snap_y = []
+        if hasattr(self, "area"):
+            self.area.queue_draw()
+
+    @staticmethod
+    def _peak_lines(values, scale):
+        if not values:
+            return []
+        top = max(values)
+        if top <= 0:
+            return []
+        average = sum(values) / len(values)
+        threshold = max(16.0, average * 1.5)
+        ranked = sorted(
+            ((value, index) for index, value in enumerate(values) if value >= threshold),
+            reverse=True,
+        )
+        chosen = []
+        for _value, index in ranked:
+            if all(abs(index - other) >= 3 for other in chosen):
+                chosen.append(index)
+                if len(chosen) >= SNAP_EDGE_LINES:
+                    break
+        return [index * scale for index in chosen]
+
+    def _detect_screen_lines(self):
+        if self._snapshot is None:
+            return [], []
+        image = self._snapshot
+        width, height = image.size
+        if width <= 0 or height <= 0:
+            return [], []
+        scale = max(1, round(width / SNAP_EDGE_WIDTH))
+        small = image.convert("L").resize(
+            (max(1, width // scale), max(1, height // scale))
+        )
+        edges = small.filter(ImageFilter.FIND_EDGES)
+        resample = getattr(Image, "Resampling", Image).BOX
+        rows = list(edges.resize((1, edges.height), resample).getdata())
+        columns = list(edges.resize((edges.width, 1), resample).getdata())
+        return self._peak_lines(columns, scale), self._peak_lines(rows, scale)
+
+    def _build_snap_lines(self):
+        self._snap_x = []
+        self._snap_y = []
+        if self._snapshot is None:
+            return
+        width, height = self._snapshot.size
+        xs = {0, max(0, width - 1)}
+        ys = {0, max(0, height - 1)}
+        try:
+            for window in list_windows():
+                xs.update((window.x, window.x + window.width - 1))
+                ys.update((window.y, window.y + window.height - 1))
+        except Exception:
+            pass
+        try:
+            edge_x, edge_y = self._detect_screen_lines()
+            xs.update(edge_x)
+            ys.update(edge_y)
+        except Exception:
+            pass
+        self._snap_x = sorted(x for x in xs if 0 <= x < width)
+        self._snap_y = sorted(y for y in ys if 0 <= y < height)
+
+    @staticmethod
+    def _snap_value(value, lines, distance=SNAP_DISTANCE):
+        best = None
+        for line in lines:
+            delta = abs(line - value)
+            if delta <= distance and (best is None or delta < abs(best - value)):
+                best = line
+        return value if best is None else best
+
+    def _snap(self, point):
+        if not self._snap_x and not self._snap_y:
+            return point
+        return (
+            self._snap_value(point[0], self._snap_x),
+            self._snap_value(point[1], self._snap_y),
+        )
+
     def _on_motion(self, _widget, event):
-        self.pointer = (int(event.x), int(event.y))
+        self.pointer = self._snap((int(event.x), int(event.y)))
         self.area.queue_draw()
         return True
 
     def _on_press(self, _widget, event):
         if not self.interactive:
             return False
-        self.pointer = (int(event.x), int(event.y))
+        self.pointer = self._snap((int(event.x), int(event.y)))
         if event.button == 1:
             if self.mode == "crosshair":
                 self._crosshair_click()
@@ -304,7 +416,7 @@ class DesktopOverlay(Gtk.Window):
             if position == self._last_pos:
                 return self._timer is not None
             self._last_pos = position
-            self.pointer = position
+            self.pointer = self._snap(position)
             if self.mode == "magnifier":
                 px, py = position
                 cells = self._mag_half * 2 + 1
@@ -384,7 +496,10 @@ class DesktopOverlay(Gtk.Window):
             self._coord_box(cr, 20, 62, self._flash)
         elif self.anchor is None:
             self._coord_box(
-                cr, 20, 62, "Arrastra para medir o clic en dos esquinas   Esc: cerrar"
+                cr,
+                20,
+                62,
+                "Arrastra o clic en dos esquinas (iman a ventanas/textos)   Esc: cerrar",
             )
         else:
             self._coord_box(
