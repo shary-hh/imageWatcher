@@ -48,6 +48,20 @@ def test_color_formats():
     assert color_picker.format_color((255, 0, 0), "hsv") == "hsv(0, 100%, 100%)"
 
 
+def test_palette_history_uses_selected_format(pump):
+    panel = color_picker.ColorPanel(color_format="rgb")
+    try:
+        panel._add_swatch((255, 0, 0))
+        row = panel.palette.get_children()[-1].get_child()
+        area = row.get_child()
+        assert area.get_tooltip_text() == "rgb(255, 0, 0)"
+        panel._copy_swatch((0, 255, 0))
+        clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        assert clipboard.wait_for_text() == "rgb(0, 255, 0)"
+    finally:
+        panel.destroy()
+
+
 @pytest.mark.parametrize("name", list(WINDOW_OPENERS))
 def test_tool_window_visible_not_dock_and_closes_with_escape(pump, name):
     window = WINDOW_OPENERS[name]()

@@ -664,11 +664,17 @@ class Application:
         )
         return pixbuf.copy()
 
+    def _format_color_value(self, hexv):
+        rgb = color_picker._hex_to_rgb(hexv)
+        if rgb is None:
+            return hexv
+        return color_picker.format_color(rgb, self.config.get("color_format", "hex"))
+
     def _copy_color_hex(self, hexv):
         rgb = color_picker._hex_to_rgb(hexv)
         if rgb is None:
             return
-        value = color_picker.format_color(rgb, self.config.get("color_format", "hex"))
+        value = self._format_color_value(hexv)
         clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
         clipboard.set_text(value, -1)
         clipboard.store()
@@ -693,7 +699,12 @@ class Application:
                 entry = Gtk.MenuItem()
                 row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
                 row.pack_start(Gtk.Image.new_from_pixbuf(self._swatch_pixbuf(hexv)), False, False, 0)
-                row.pack_start(Gtk.Label(label=hexv, xalign=0), False, False, 0)
+                row.pack_start(
+                    Gtk.Label(label=self._format_color_value(hexv), xalign=0),
+                    False,
+                    False,
+                    0,
+                )
                 entry.add(row)
                 entry.connect("activate", lambda *_, h=hexv: self._copy_color_hex(h))
                 submenu.append(entry)

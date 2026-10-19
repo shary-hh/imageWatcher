@@ -24,6 +24,17 @@ def test_defaults_and_persistence(monkeypatch, tmp_path):
     assert reloaded.get("delay_seconds") == 7
 
 
+def test_color_history_uses_selected_format():
+    from types import SimpleNamespace
+
+    from imagewatcher.app import Application
+
+    app = SimpleNamespace(config={"color_format": "rgb"})
+    assert Application._format_color_value(app, "#FF0000") == "rgb(255, 0, 0)"
+    app.config["color_format"] = "hex"
+    assert Application._format_color_value(app, "#00FF00") == "#00FF00"
+
+
 def test_capture_bar_visibility_preference():
     from types import SimpleNamespace
 

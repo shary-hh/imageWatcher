@@ -361,10 +361,11 @@ class ColorLoupe(Gtk.Window):
 class ColorPanel(Gtk.Box):
     """Panel de paleta/formatos embebible."""
 
-    def __init__(self, on_pick=None):
+    def __init__(self, on_pick=None, color_format="hex"):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         ui.apply_dark(self)
         self.on_pick = on_pick
+        self.color_format = str(color_format).lower()
         self.current = (0, 0, 0)
         self.history = []
         self._frozen = False
@@ -592,7 +593,7 @@ class ColorPanel(Gtk.Box):
         area.set_size_request(28, 28)
         area._color = rgb
         area.connect("draw", self._draw_swatch_item)
-        area.set_tooltip_text(format_color(rgb, "hex"))
+        area.set_tooltip_text(format_color(rgb, self.color_format))
         row = Gtk.EventBox()
         row.add(area)
         row.connect("button-press-event", lambda *_: self._copy_swatch(rgb))
@@ -601,7 +602,7 @@ class ColorPanel(Gtk.Box):
 
     def _copy_swatch(self, rgb):
         clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
-        clipboard.set_text(format_color(rgb, "hex"), -1)
+        clipboard.set_text(format_color(rgb, self.color_format), -1)
         clipboard.store()
 
     def _draw_swatch_item(self, widget, cr):
@@ -620,14 +621,14 @@ class ColorPanel(Gtk.Box):
 class ColorPickerWindow(Gtk.Window):
     """Ventana de paleta independiente (opcional)."""
 
-    def __init__(self, on_pick=None):
+    def __init__(self, on_pick=None, color_format="hex"):
         super().__init__(title="Paleta de colores")
         ui.install_theme()
         ui.apply_dark(self)
         self.set_default_size(360, 720)
         self.set_keep_above(True)
         self.set_titlebar(ui.header("Paleta de colores", "Cuentagotas y formatos", "color-select"))
-        self.panel = ColorPanel(on_pick)
+        self.panel = ColorPanel(on_pick, color_format=color_format)
         self.add(self.panel)
         self.connect("key-press-event", self._on_key)
         self.connect("destroy", lambda *_: self.panel.stop())
@@ -662,5 +663,5 @@ def open_color_picker(on_pick=None, color_format="hex", history=None):
     )
 
 
-def open_palette(on_pick=None):
-    return ColorPickerWindow(on_pick)
+def open_palette(on_pick=None, color_format="hex"):
+    return ColorPickerWindow(on_pick, color_format=color_format)

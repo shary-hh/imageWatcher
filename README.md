@@ -49,7 +49,8 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
   lupa o en el menu (*Formato de color*): HEX, RGB, HSL, HSV, HTML, C++ o Delphi.
   Al cambiar el formato, **el color copiado se actualiza** en vivo. Se guarda un
   **historial de colores** (16) que aparece en la lupa y en el menu
-  (*Historial de colores*, clic para recopiar; opcion de limpiarlo).
+  (*Historial de colores*, clic para recopiar; opcion de limpiarlo). El historial
+  muestra y copia cada color en el **formato de color seleccionado**.
 - **Lupa** que sigue al cursor.
 - **Punto de mira**: arrastra desde cualquier punto o haz clic en dos esquinas
   para medir el rectangulo; muestra **Ancho x Alto (px)** y copia las medidas al
