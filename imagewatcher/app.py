@@ -520,6 +520,7 @@ class Application:
                 on_pick=self._remember_color,
                 color_format=self.config.get("color_format", "hex"),
                 history=self.config.get("color_history", []),
+                zoom=self.config.get("color_zoom", 11),
             )
         if name == "whiteboard":
             return whiteboard.open_whiteboard(self.config)
@@ -815,6 +816,18 @@ class PreferencesDialog(Gtk.Dialog):
         )
         box.pack_start(self.show_bar_check, False, False, 0)
 
+        zoom_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        zoom_row.pack_start(
+            Gtk.Label(label="Zoom del selector de color:"), False, False, 0
+        )
+        self.color_zoom_spin = Gtk.SpinButton.new_with_range(4, 24, 1)
+        self.color_zoom_spin.set_value(int(self.config.get("color_zoom", 11)))
+        self.color_zoom_spin.set_tooltip_text(
+            "Tamano de cada pixel en la lupa del selector de color."
+        )
+        zoom_row.pack_start(self.color_zoom_spin, False, False, 0)
+        box.pack_start(zoom_row, False, False, 0)
+
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         row.pack_start(Gtk.Label(label="Segundos de retardo:"), False, False, 0)
         adj = Gtk.Adjustment(value=self.config.get("delay_seconds", 3), lower=1, upper=60, step_increment=1)
@@ -950,6 +963,7 @@ class PreferencesDialog(Gtk.Dialog):
         self.config["copy_to_clipboard"] = self.clipboard_check.get_active()
         self.config["capture_cursor"] = self.cursor_check.get_active()
         self.config["show_capture_bar"] = self.show_bar_check.get_active()
+        self.config["color_zoom"] = int(self.color_zoom_spin.get_value())
         self.config["delay_seconds"] = int(self.delay_spin.get_value())
         self.config["fixed_region_size"] = [
             int(self.fixed_width_spin.get_value()),

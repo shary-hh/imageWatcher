@@ -50,7 +50,8 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
   Al cambiar el formato, **el color copiado se actualiza** en vivo. Se guarda un
   **historial de colores** (16) que aparece en la lupa y en el menu
   (*Historial de colores*, clic para recopiar; opcion de limpiarlo). El historial
-  muestra y copia cada color en el **formato de color seleccionado**.
+  muestra y copia cada color en el **formato de color seleccionado**. El tamano
+  de zoom de la lupa se ajusta en **Preferencias > General**.
 - **Lupa** que sigue al cursor.
 - **Punto de mira**: arrastra desde cualquier punto o haz clic en dos esquinas
   para medir el rectangulo; muestra **Ancho x Alto (px)** y copia las medidas al
@@ -230,6 +231,15 @@ packaging/         scripts .deb / AppImage / .exe + assets
 run.sh             lanzador
 install.sh         instalador
 ```
+
+## Seguridad
+
+- No subas tokens, claves ni credenciales al repositorio. `.gitignore` bloquea
+  `.env`, claves privadas, configuracion y capturas locales.
+- El workflow `.github/workflows/secrets.yml` ejecuta **gitleaks** en cada push
+  y pull request.
+- Si alguna credencial llego a commitearse, rota la credencial y purga el
+  historial; borrar el archivo en un commit nuevo no la elimina del historial.
 
 ## Desinstalar
 

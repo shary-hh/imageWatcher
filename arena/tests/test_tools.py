@@ -131,6 +131,25 @@ def test_reused_interactive_overlay_keeps_receiving_clicks():
     assert "click_through" not in overlay.calls
 
 
+def test_color_zoom_is_configurable(pump):
+    loupe = color_picker.ColorLoupe(zoom=20)
+    try:
+        assert loupe.zoom == 20
+        assert loupe.view_size == color_picker.VIEW_PIXELS * 20
+    finally:
+        loupe.destroy()
+
+    panel = color_picker.ColorPanel(zoom=20)
+    try:
+        assert panel.zoom == 20
+        assert panel.preview.get_size_request() == (
+            color_picker.SAMPLE * 20,
+            color_picker.SAMPLE * 20,
+        )
+    finally:
+        panel.destroy()
+
+
 def test_color_loupe_picks_from_frozen_screen(pump):
     picked = {}
     loupe = color_picker.ColorLoupe(lambda rgb, hexv: picked.update(rgb=rgb, hex=hexv))

@@ -24,6 +24,7 @@ DEFAULTS = {
     "hotkeys": dict(HOTKEY_DEFAULTS),
     "hotkeys_enabled": True,
     "color_format": "hex",
+    "color_zoom": 11,
     "color_history": [],
     "record_fps": 25,
     "record_audio": False,

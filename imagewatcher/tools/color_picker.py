@@ -83,7 +83,15 @@ class ColorLoupe(Gtk.Window):
 
     FORMAT_ORDER = ["hex", "rgb", "hsl", "hsv", "html", "c++", "delphi"]
 
-    def __init__(self, on_pick=None, on_cancel=None, base=None, color_format="hex", history=None):
+    def __init__(
+        self,
+        on_pick=None,
+        on_cancel=None,
+        base=None,
+        color_format="hex",
+        history=None,
+        zoom=None,
+    ):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         ui.install_theme()
         self.on_pick = on_pick
@@ -93,6 +101,12 @@ class ColorLoupe(Gtk.Window):
         fmt = str(color_format).lower()
         self.format_index = self.formats.index(fmt) if fmt in self.formats else 0
         self.color_format = self.formats[self.format_index]
+        try:
+            zoom = int(zoom)
+        except (TypeError, ValueError):
+            zoom = VIEW_SCALE
+        self.zoom = max(2, min(40, zoom))
+        self.view_size = VIEW_PIXELS * self.zoom
         self.base = base if base is not None else capture_screen()
         self.pointer = get_pointer_position()
         self._timer = None
@@ -268,8 +282,8 @@ class ColorLoupe(Gtk.Window):
         pad = 8
         bar_h = 46
         hist_h = 24 if self.history else 0
-        box_w = VIEW_SIZE + pad * 2
-        box_h = VIEW_SIZE + pad * 2 + bar_h + hist_h
+        box_w = self.view_size + pad * 2
+        box_h = self.view_size + pad * 2 + bar_h + hist_h
 
         bx = px + 22
         by = py + 22
@@ -298,31 +312,31 @@ class ColorLoupe(Gtk.Window):
                 r, g, b = self._sample(px + i, py + j)
                 cr.set_source_rgb(r / 255, g / 255, b / 255)
                 cr.rectangle(
-                    origin_x + (i + half) * VIEW_SCALE,
-                    origin_y + (j + half) * VIEW_SCALE,
-                    VIEW_SCALE,
-                    VIEW_SCALE,
+                    origin_x + (i + half) * self.zoom,
+                    origin_y + (j + half) * self.zoom,
+                    self.zoom,
+                    self.zoom,
                 )
                 cr.fill()
 
-        cx = origin_x + half * VIEW_SCALE
-        cy = origin_y + half * VIEW_SCALE
+        cx = origin_x + half * self.zoom
+        cy = origin_y + half * self.zoom
         cr.set_source_rgba(0, 0, 0, 0.8)
         cr.set_line_width(3)
-        cr.rectangle(cx - 1.5, cy - 1.5, VIEW_SCALE + 3, VIEW_SCALE + 3)
+        cr.rectangle(cx - 1.5, cy - 1.5, self.zoom + 3, self.zoom + 3)
         cr.stroke()
         cr.set_source_rgb(1, 1, 1)
         cr.set_line_width(1.5)
-        cr.rectangle(cx, cy, VIEW_SCALE, VIEW_SCALE)
+        cr.rectangle(cx, cy, self.zoom, self.zoom)
         cr.stroke()
 
-        bar_y = origin_y + VIEW_SIZE + pad
+        bar_y = origin_y + self.view_size + pad
         r, g, b = rgb
         cr.set_source_rgb(r / 255, g / 255, b / 255)
-        _rounded_rect(cr, origin_x, bar_y, VIEW_SIZE, bar_h, 8)
+        _rounded_rect(cr, origin_x, bar_y, self.view_size, bar_h, 8)
         cr.fill()
         cr.set_source_rgba(1, 1, 1, 0.18)
-        _rounded_rect(cr, origin_x + 0.5, bar_y + 0.5, VIEW_SIZE - 1, bar_h - 1, 8)
+        _rounded_rect(cr, origin_x + 0.5, bar_y + 0.5, self.view_size - 1, bar_h - 1, 8)
         cr.stroke()
 
         text_color = _contrast(rgb)
@@ -361,11 +375,16 @@ class ColorLoupe(Gtk.Window):
 class ColorPanel(Gtk.Box):
     """Panel de paleta/formatos embebible."""
 
-    def __init__(self, on_pick=None, color_format="hex"):
+    def __init__(self, on_pick=None, color_format="hex", zoom=ZOOM):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         ui.apply_dark(self)
         self.on_pick = on_pick
         self.color_format = str(color_format).lower()
+        try:
+            zoom = int(zoom)
+        except (TypeError, ValueError):
+            zoom = ZOOM
+        self.zoom = max(2, min(40, zoom))
         self.current = (0, 0, 0)
         self.history = []
         self._frozen = False
@@ -417,7 +436,7 @@ class ColorPanel(Gtk.Box):
         frame.get_style_context().add_class("card")
         frame.set_shadow_type(Gtk.ShadowType.NONE)
         self.preview = Gtk.DrawingArea()
-        self.preview.set_size_request(SAMPLE * ZOOM, SAMPLE * ZOOM)
+        self.preview.set_size_request(SAMPLE * self.zoom, SAMPLE * self.zoom)
         self.preview.connect("draw", self._draw_preview)
         self.preview.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
         self.preview.connect("button-press-event", lambda *_: (self._launch_loupe(), True)[1])
@@ -535,20 +554,25 @@ class ColorPanel(Gtk.Box):
         image = self._sample_image
         if image is None:
             return False
-        big = image.resize((SAMPLE * ZOOM, SAMPLE * ZOOM), Image.NEAREST)
+        big = image.resize((SAMPLE * self.zoom, SAMPLE * self.zoom), Image.NEAREST)
         pixbuf = GdkPixbuf.Pixbuf.new_from_data(
             big.tobytes(), GdkPixbuf.Colorspace.RGB, True, 8,
             big.width, big.height, big.width * 4,
         ).copy()
         Gdk.cairo_set_source_pixbuf(cr, pixbuf, 0, 0)
         cr.paint()
-        center = SAMPLE * ZOOM / 2
+        center = SAMPLE * self.zoom / 2
         cr.set_source_rgba(1, 1, 1, 0.9)
         cr.set_line_width(1)
-        cr.rectangle(center - ZOOM / 2, center - ZOOM / 2, ZOOM, ZOOM)
+        cr.rectangle(center - self.zoom / 2, center - self.zoom / 2, self.zoom, self.zoom)
         cr.stroke()
         cr.set_source_rgba(0, 0, 0, 0.8)
-        cr.rectangle(center - ZOOM / 2 - 1, center - ZOOM / 2 - 1, ZOOM + 2, ZOOM + 2)
+        cr.rectangle(
+            center - self.zoom / 2 - 1,
+            center - self.zoom / 2 - 1,
+            self.zoom + 2,
+            self.zoom + 2,
+        )
         cr.stroke()
         return False
 
@@ -621,14 +645,14 @@ class ColorPanel(Gtk.Box):
 class ColorPickerWindow(Gtk.Window):
     """Ventana de paleta independiente (opcional)."""
 
-    def __init__(self, on_pick=None, color_format="hex"):
+    def __init__(self, on_pick=None, color_format="hex", zoom=ZOOM):
         super().__init__(title="Paleta de colores")
         ui.install_theme()
         ui.apply_dark(self)
         self.set_default_size(360, 720)
         self.set_keep_above(True)
         self.set_titlebar(ui.header("Paleta de colores", "Cuentagotas y formatos", "color-select"))
-        self.panel = ColorPanel(on_pick, color_format=color_format)
+        self.panel = ColorPanel(on_pick, color_format=color_format, zoom=zoom)
         self.add(self.panel)
         self.connect("key-press-event", self._on_key)
         self.connect("destroy", lambda *_: self.panel.stop())
@@ -643,7 +667,7 @@ class ColorPickerWindow(Gtk.Window):
         return False
 
 
-def open_color_picker(on_pick=None, color_format="hex", history=None):
+def open_color_picker(on_pick=None, color_format="hex", history=None, zoom=None):
     """Cuentagotas con lupa (overlay transitorio)."""
     def report(rgb, value):
         if on_pick:
@@ -659,9 +683,13 @@ def open_color_picker(on_pick=None, color_format="hex", history=None):
             pass
 
     return ColorLoupe(
-        report, base=capture_screen(), color_format=color_format, history=history
+        report,
+        base=capture_screen(),
+        color_format=color_format,
+        history=history,
+        zoom=zoom,
     )
 
 
-def open_palette(on_pick=None, color_format="hex"):
-    return ColorPickerWindow(on_pick, color_format=color_format)
+def open_palette(on_pick=None, color_format="hex", zoom=ZOOM):
+    return ColorPickerWindow(on_pick, color_format=color_format, zoom=zoom)

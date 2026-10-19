@@ -6,3 +6,38 @@ venv/
 dist/
 build/
 *.egg-info/
+
+# Secretos y credenciales (nunca subir al repositorio)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials
+credentials.*
+secrets/
+.ssh/
+.gnupg/
+
+# Configuracion, capturas y registros locales
+config.json
+*.local
+*.log
+core
+*.core
+capturas/
+Capturas/
+screenshots/
+Screenshots/
+
+# Editores y sistema
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
