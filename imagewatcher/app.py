@@ -165,25 +165,29 @@ class CaptureBar(Gtk.Window):
         button.set_tooltip_text("Mas acciones")
 
         menu = Gtk.Menu()
-        items = [
-            ("Editor de imagenes", "pen", lambda *_: self.app.open_editor_blank()),
-            ("Herramientas de diseno", "color", lambda *_: self.app.open_tools_menu()),
-            ("sep", None, None),
-            ("Repetir ultima captura", "undo", lambda *_: self.app.do_capture("repeat")),
-            ("Region fija", "region", lambda *_: self.app.do_capture("fixed")),
-            ("Captura freehand", "pen", lambda *_: self.app.do_capture("freehand")),
-            ("Ventana con desplazamiento", "window", lambda *_: self.app.do_capture("scrolling")),
-            ("Captura con retardo", "clock", lambda *_: self.app.do_capture("delayed")),
-            ("sep", None, None),
-            ("Guia de uso", None, lambda *_: self.app.show_welcome()),
-            ("Ocultar barra de captura", None, lambda *_: self.app._set_bar_visible(False)),
-            ("Preferencias", "settings", lambda *_: self.app.open_preferences()),
-        ]
-        for label, kind, callback in items:
-            if label == "sep":
-                menu.append(Gtk.SeparatorMenuItem())
-                continue
-            menu.append(ui.menu_item(label, kind, callback))
+        menu.append(
+            ui.menu_item(
+                "Editor de imagenes", "pen", lambda *_: self.app.open_editor_blank()
+            )
+        )
+        menu.append(self.app._design_tools_menu())
+        menu.append(Gtk.SeparatorMenuItem())
+        menu.append(self.app._capture_menu(include_primary=False))
+        menu.append(self.app._favorites_menu())
+        menu.append(Gtk.SeparatorMenuItem())
+        menu.append(
+            ui.menu_item(
+                "Ocultar barra de captura",
+                None,
+                lambda *_: self.app._set_bar_visible(False),
+            )
+        )
+        menu.append(ui.menu_item("Guia de uso", None, lambda *_: self.app.show_welcome()))
+        menu.append(
+            ui.menu_item(
+                "Preferencias", "settings", lambda *_: self.app.open_preferences()
+            )
+        )
         menu.show_all()
         button.set_popup(menu)
         return button
@@ -281,67 +285,103 @@ class Application:
             activate_time,
         )
 
+    def _design_tools_menu(self):
+        item = Gtk.MenuItem(label="Herramientas de diseno")
+        submenu = Gtk.Menu()
+        for label, kind, callback in [
+            ("Selector de color", "color", lambda: self.open_tool("color")),
+            ("Lupa", "zoom-in", lambda: self.open_tool("magnifier")),
+            ("Regla de pixeles", "ruler", lambda: self.open_tool("ruler")),
+            ("Punto de mira", "crosshair", lambda: self.open_tool("crosshair")),
+            ("Transportador", "protractor", lambda: self.open_tool("protractor")),
+            ("Pizarra", "pen", lambda: self.open_tool("whiteboard")),
+        ]:
+            submenu.append(ui.menu_item(label, kind, lambda *_, cb=callback: cb()))
+        item.set_submenu(submenu)
+        return item
+
+    def _capture_menu(self, include_primary=True):
+        item = Gtk.MenuItem(label="Capturar")
+        submenu = Gtk.Menu()
+        entries = []
+        if include_primary:
+            entries.extend(
+                [
+                    ("Pantalla completa", "display", lambda: self.do_capture("fullscreen")),
+                    ("Ventana activa", "window", lambda: self.do_capture("window")),
+                    ("Region", "region", lambda: self.do_capture("region")),
+                ]
+            )
+        entries.extend(
+            [
+                ("Ventana con desplazamiento", "window", lambda: self.do_capture("scrolling")),
+                ("Region fija", "region", lambda: self.do_capture("fixed")),
+                ("Captura freehand", "pen", lambda: self.do_capture("freehand")),
+                ("Repetir ultima captura", "undo", lambda: self.do_capture("repeat")),
+                ("Captura con retardo", "clock", lambda: self.do_capture("delayed")),
+                ("Monitor principal", "display", lambda: self.do_capture("monitor")),
+            ]
+        )
+        for label, kind, callback in entries:
+            submenu.append(ui.menu_item(label, kind, lambda *_, cb=callback: cb()))
+        item.set_submenu(submenu)
+        return item
+
+    def _tools_category_menu(self):
+        item = Gtk.MenuItem(label="Herramientas")
+        submenu = Gtk.Menu()
+        submenu.append(
+            ui.menu_item(
+                "Editor de imagenes", "pen", lambda *_: self.open_editor_blank()
+            )
+        )
+        submenu.append(
+            ui.menu_item(
+                "Grabador de pantalla", "record", lambda *_: self.open_tool("recorder")
+            )
+        )
+        submenu.append(Gtk.SeparatorMenuItem())
+        submenu.append(self._design_tools_menu())
+        submenu.append(Gtk.SeparatorMenuItem())
+        submenu.append(self._color_history_menu())
+        submenu.append(self._color_format_menu())
+        submenu.append(Gtk.SeparatorMenuItem())
+        submenu.append(
+            ui.menu_item(
+                "Ocultar superposiciones", None, lambda *_: self._hide_overlays()
+            )
+        )
+        item.set_submenu(submenu)
+        return item
+
     def _build_menu(self):
         menu = Gtk.Menu()
-        entries = [
-            ("Mostrar barra de captura", lambda *_: self._set_bar_visible(True, force=True)),
-            ("Ocultar barra de captura", lambda *_: self._set_bar_visible(False)),
-            ("sep", None),
-            ("Capturar pantalla completa", lambda *_: self.do_capture("fullscreen")),
-            ("Capturar ventana activa", lambda *_: self.do_capture("window")),
-            ("Capturar ventana con desplazamiento", lambda *_: self.do_capture("scrolling")),
-            ("Capturar region", lambda *_: self.do_capture("region")),
-            ("Capturar region fija", lambda *_: self.do_capture("fixed")),
-            ("Captura freehand", lambda *_: self.do_capture("freehand")),
-            ("Repetir ultima captura", lambda *_: self.do_capture("repeat")),
-            ("Captura con retardo", lambda *_: self.do_capture("delayed")),
-            ("sep", None),
-            ("Editor de imagenes", lambda *_: self.open_editor_blank()),
-            ("Grabador de pantalla", lambda *_: self.open_tool("recorder")),
-            ("Guia de uso", lambda *_: self.show_welcome()),
-            ("sep", None),
-        ]
-        for label, callback in entries:
-            if label == "sep":
-                menu.append(Gtk.SeparatorMenuItem())
-                continue
-            item = Gtk.MenuItem(label=label)
-            item.connect("activate", callback)
-            menu.append(item)
-        # Favoritos siempre en la parte superior del menu.
-        menu.prepend(Gtk.SeparatorMenuItem())
-        menu.prepend(self._favorites_menu())
-        tools = Gtk.MenuItem(label="Herramientas de diseno")
-        submenu = Gtk.Menu()
-        for label, callback in [
-            ("Selector de color", lambda *_: self.open_tool("color")),
-            ("Lupa", lambda *_: self.open_tool("magnifier")),
-            ("Regla de pixeles", lambda *_: self.open_tool("ruler")),
-            ("Punto de mira", lambda *_: self.open_tool("crosshair")),
-            ("Transportador", lambda *_: self.open_tool("protractor")),
-            ("Pizarra", lambda *_: self.open_tool("whiteboard")),
-        ]:
-            sub = Gtk.MenuItem(label=label)
-            sub.connect("activate", callback)
-            submenu.append(sub)
-        tools.set_submenu(submenu)
-        menu.append(tools)
-        menu.append(self._color_history_menu())
-        menu.append(self._color_format_menu())
-        hide_overlays = Gtk.MenuItem(label="Ocultar superposiciones")
-        hide_overlays.connect("activate", lambda *_: self._hide_overlays())
-        menu.append(hide_overlays)
+        menu.append(self._favorites_menu())
+        menu.append(self._capture_menu())
+        menu.append(self._tools_category_menu())
         menu.append(Gtk.SeparatorMenuItem())
-        prefs = Gtk.MenuItem(label="Preferencias...")
-        prefs.connect("activate", lambda *_: self.open_preferences())
-        menu.append(prefs)
-        about = Gtk.MenuItem(label="Acerca de")
-        about.connect("activate", lambda *_: self._about())
-        menu.append(about)
+        menu.append(
+            ui.menu_item(
+                "Mostrar barra de captura",
+                None,
+                lambda *_: self._set_bar_visible(True, force=True),
+            )
+        )
+        menu.append(
+            ui.menu_item(
+                "Ocultar barra de captura", None, lambda *_: self._set_bar_visible(False)
+            )
+        )
         menu.append(Gtk.SeparatorMenuItem())
-        quit_item = Gtk.MenuItem(label="Salir")
-        quit_item.connect("activate", lambda *_: self.quit())
-        menu.append(quit_item)
+        menu.append(
+            ui.menu_item(
+                "Preferencias...", "settings", lambda *_: self.open_preferences()
+            )
+        )
+        menu.append(ui.menu_item("Guia de uso", None, lambda *_: self.show_welcome()))
+        menu.append(ui.menu_item("Acerca de", None, lambda *_: self._about()))
+        menu.append(Gtk.SeparatorMenuItem())
+        menu.append(ui.menu_item("Salir", None, lambda *_: self.quit()))
         menu.show_all()
         return menu
 
@@ -711,26 +751,8 @@ class Application:
         """Muestra el menu de herramientas en la posicion del mouse."""
         menu = Gtk.Menu()
         menu.append(self._favorites_menu())
-        menu.append(Gtk.SeparatorMenuItem())
-        entries = [
-            ("Selector de color (lupa)", "color", lambda: self.open_tool("color")),
-            ("Lupa", "zoom-in", lambda: self.open_tool("magnifier")),
-            ("Regla de pixeles", "ruler", lambda: self.open_tool("ruler")),
-            ("Punto de mira", "crosshair", lambda: self.open_tool("crosshair")),
-            ("Transportador", "protractor", lambda: self.open_tool("protractor")),
-            ("Pizarra", "pen", lambda: self.open_tool("whiteboard")),
-        ]
-        for label, kind, callback in entries:
-            menu.append(ui.menu_item(label, kind, lambda *_, cb=callback: cb()))
-
-        menu.append(Gtk.SeparatorMenuItem())
-        menu.append(self._color_history_menu())
-        menu.append(self._color_format_menu())
-
-        menu.append(Gtk.SeparatorMenuItem())
-        hide_item = Gtk.MenuItem(label="Ocultar superposiciones")
-        hide_item.connect("activate", lambda *_: self._hide_overlays())
-        menu.append(hide_item)
+        menu.append(self._capture_menu())
+        menu.append(self._tools_category_menu())
         menu.show_all()
         try:
             _, x, y = Gdk.Display.get_default().get_default_seat().get_pointer().get_position()

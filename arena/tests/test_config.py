@@ -45,6 +45,21 @@ def test_capture_bar_shows_favorite_tools(pump):
         def open_tool(self, name):
             pass
 
+        def _design_tools_menu(self):
+            from gi.repository import Gtk
+
+            return Gtk.MenuItem(label="tools")
+
+        def _capture_menu(self, include_primary=True):
+            from gi.repository import Gtk
+
+            return Gtk.MenuItem(label="capture")
+
+        def _favorites_menu(self):
+            from gi.repository import Gtk
+
+            return Gtk.MenuItem(label="favorites")
+
     bar = CaptureBar(_App())
     try:
         pump(120)
@@ -52,6 +67,37 @@ def test_capture_bar_shows_favorite_tools(pump):
         assert len(bar.favorites_box.get_children()) == 2
     finally:
         bar.destroy()
+
+
+def test_capture_menu_groups_capture_modes():
+    from types import SimpleNamespace
+
+    from gi.repository import Gtk
+
+    from imagewatcher.app import Application
+
+    app = SimpleNamespace(do_capture=lambda mode: None)
+
+    def labels(item):
+        result = []
+        for child in item.get_submenu().get_children():
+            box = child.get_child()
+            if isinstance(box, Gtk.Box):
+                for widget in box.get_children():
+                    if isinstance(widget, Gtk.Label):
+                        result.append(widget.get_text())
+        return result
+
+    full = labels(Application._capture_menu(app))
+    assert "Pantalla completa" in full
+    assert "Region" in full
+    assert "Ventana con desplazamiento" in full
+    assert "Monitor principal" in full
+
+    secondary = labels(Application._capture_menu(app, include_primary=False))
+    assert "Pantalla completa" not in secondary
+    assert "Region fija" in secondary
+    assert "Captura freehand" in secondary
 
 
 def test_favorite_tools_are_filtered_and_dispatched():
