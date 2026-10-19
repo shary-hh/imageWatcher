@@ -37,6 +37,8 @@ class DesktopOverlay(Gtk.Window):
         # Mira, regla y transportador son interactivos (se usan con clics).
         self.interactive = mode in ("crosshair", "ruler", "protractor")
         self.anchor = None
+        self._dragging = False
+        self._drag_origin = None
         self.points = []
         self.dpi = 96
         self._flash = None
@@ -62,9 +64,14 @@ class DesktopOverlay(Gtk.Window):
         self.resize(width, height)
 
         self.area = Gtk.DrawingArea()
-        self.area.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK)
+        self.area.add_events(
+            Gdk.EventMask.BUTTON_PRESS_MASK
+            | Gdk.EventMask.BUTTON_RELEASE_MASK
+            | Gdk.EventMask.POINTER_MOTION_MASK
+        )
         self.area.connect("draw", self._on_draw)
         self.area.connect("button-press-event", self._on_press)
+        self.area.connect("button-release-event", self._on_release)
         self.area.connect("motion-notify-event", self._on_motion)
         self.add(self.area)
         self.connect("key-press-event", self._on_key)
@@ -124,10 +131,25 @@ class DesktopOverlay(Gtk.Window):
         self.area.queue_draw()
         return True
 
+    def _on_release(self, _widget, event):
+        if not self.interactive or event.button != 1:
+            return False
+        if self.mode == "crosshair" and self._dragging:
+            self._dragging = False
+            ox, oy = self._drag_origin or self.anchor or (0, 0)
+            if abs(self.pointer[0] - ox) + abs(self.pointer[1] - oy) > 4:
+                self._copy_size()
+                self.hide()
+                self.stop()
+        return True
+
     def _crosshair_click(self):
         if self.anchor is None:
             self.anchor = self.pointer
+            self._drag_origin = self.pointer
+            self._dragging = True
         else:
+            self._dragging = False
             self._copy_size()
             self.hide()
             self.stop()
@@ -360,8 +382,14 @@ class DesktopOverlay(Gtk.Window):
         self._coord_box(cr, 20, 20, f"X = {px}   Y = {py}")
         if self._flash:
             self._coord_box(cr, 20, 62, self._flash)
+        elif self.anchor is None:
+            self._coord_box(
+                cr, 20, 62, "Arrastra para medir o clic en dos esquinas   Esc: cerrar"
+            )
         else:
-            self._coord_box(cr, 20, 62, "Clic: fijar esquina / copiar tamano   Esc: cerrar")
+            self._coord_box(
+                cr, 20, 62, "Mueve el raton y clic para copiar el tamano   Esc: cerrar"
+            )
 
     def _draw_ruler(self, cr):
         metrics = self._ruler_metrics()

@@ -197,8 +197,33 @@ def test_crosshair_exits_after_selection(pump):
 
         overlay._on_press(overlay.area, _Click(100, 100))
         assert overlay.anchor == (100, 100)
+        # Un clic sin arrastre mantiene la esquina fijada.
+        overlay._on_release(overlay.area, _Click(100, 100))
+        assert overlay.get_visible()
+        assert overlay.anchor == (100, 100)
         overlay._on_press(overlay.area, _Click(300, 250))
         assert not overlay.get_visible()
+    finally:
+        overlay.destroy()
+
+
+def test_crosshair_drag_copies_on_release(pump):
+    from imagewatcher.tools.overlay import DesktopOverlay
+
+    overlay = DesktopOverlay("crosshair")
+    try:
+        pump(120)
+
+        class _Click:
+            def __init__(self, x, y, button=1):
+                self.x, self.y, self.button = x, y, button
+
+        overlay._on_press(overlay.area, _Click(100, 100))
+        overlay.pointer = (340, 260)
+        overlay._on_release(overlay.area, _Click(340, 260))
+        assert not overlay.get_visible()
+        clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        assert clipboard.wait_for_text() == "240 x 160 px"
     finally:
         overlay.destroy()
 
