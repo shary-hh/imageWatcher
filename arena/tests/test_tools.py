@@ -123,7 +123,9 @@ def test_reused_interactive_overlay_keeps_receiving_clicks():
 
     overlay = _Overlay()
     app = SimpleNamespace(
-        _overlays={"crosshair": overlay}, _sync_escape_grab=lambda: None
+        _overlays={"crosshair": overlay},
+        _sync_escape_grab=lambda: None,
+        config={"snap_enabled": True},
     )
     assert Application._toggle_overlay(app, "crosshair") is overlay
     assert "reset" in overlay.calls
@@ -340,6 +342,30 @@ def test_crosshair_snaps_to_detected_lines(pump):
         assert overlay._snap((120, 170)) == (120, 170)
         assert overlay._snap_value(205, [100, 200]) == 200
         assert overlay._snap_value(250, [100, 200]) == 250
+    finally:
+        overlay.destroy()
+
+
+def test_crosshair_can_disable_magnets(pump):
+    from types import SimpleNamespace
+
+    from gi.repository import Gdk
+
+    from imagewatcher.tools.overlay import DesktopOverlay
+
+    overlay = DesktopOverlay("crosshair", snap_enabled=False)
+    try:
+        pump(120)
+        assert overlay.snap_enabled is False
+        assert overlay._snap_x == [] and overlay._snap_y == []
+        overlay._snap_x = [100]
+        overlay._snap_y = [200]
+        assert overlay._snap((105, 195)) == (105, 195)
+        assert overlay._on_key(None, SimpleNamespace(keyval=Gdk.KEY_m)) is True
+        assert overlay.snap_enabled is True
+        overlay._snap_x = [100]
+        overlay._snap_y = [200]
+        assert overlay._snap((105, 195)) == (100, 200)
     finally:
         overlay.destroy()
 

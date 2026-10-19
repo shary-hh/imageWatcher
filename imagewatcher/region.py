@@ -13,6 +13,7 @@ from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 from PIL import Image, ImageChops, ImageDraw  # noqa: E402
 
 from .gtk_util import pil_to_pixbuf  # noqa: E402
+from .snap import SNAP_DISTANCE, build_snap_lines, snap_value  # noqa: E402
 
 HANDLE = 9
 CORNERS = {"nw", "ne", "sw", "se"}
@@ -118,10 +119,19 @@ class RegionSelector(Gtk.Window):
     """Selector de region con seleccion movible y redimensionable."""
 
     def __init__(self, base_image, on_done, on_cancel=None, detect_windows=True,
-                 fixed_size=None, freehand=False, initial_rect=None):
+                 fixed_size=None, freehand=False, initial_rect=None,
+                 snap_enabled=True):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.base = base_image
         self._pixbuf = pil_to_pixbuf(base_image)
+        self.snap_enabled = bool(snap_enabled)
+        if self.snap_enabled:
+            try:
+                self._snap_x, self._snap_y = build_snap_lines(base_image)
+            except Exception:
+                self._snap_x, self._snap_y = [], []
+        else:
+            self._snap_x, self._snap_y = [], []
         self.on_done = on_done
         self.on_cancel = on_cancel
         self.detect_windows = detect_windows
@@ -208,6 +218,25 @@ class RegionSelector(Gtk.Window):
         if event.keyval == Gdk.KEY_Escape:
             self._finish_cancel()
             return True
+        if event.keyval in (Gdk.KEY_l, Gdk.KEY_L) and not self.fixed_size:
+            self.freehand_mode = not self.freehand_mode
+            self.rect = None
+            self._freehand_points = []
+            self.mode = None
+            self.hover_rect = None
+            self._drag_start = None
+            self._rect_start = None
+            self.area.queue_draw()
+            return True
+        if event.keyval in (Gdk.KEY_m, Gdk.KEY_M) and not self.fixed_size:
+            self.snap_enabled = not self.snap_enabled
+            if self.snap_enabled and not self._snap_x and not self._snap_y:
+                try:
+                    self._snap_x, self._snap_y = build_snap_lines(self.base)
+                except Exception:
+                    pass
+            self.area.queue_draw()
+            return True
         if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
             if self.freehand_mode and len(self._freehand_points) >= 3:
                 self._finish_freehand()
@@ -260,7 +289,8 @@ class RegionSelector(Gtk.Window):
                 self._rect_start = self._ltrb(self.rect)
                 return True
 
-        # Empezar una nueva seleccion.
+        # Empezar una nueva seleccion (la esquina se acopla a los imanes).
+        x, y = self._snap_point((x, y))
         self.mode = "creating"
         self.rect = None
         self.hover_rect = None
@@ -286,14 +316,16 @@ class RegionSelector(Gtk.Window):
             return True
 
         if self.mode == "creating":
-            self.rect = self._normalize(self._drag_start, (x, y))
+            self.rect = self._normalize(self._drag_start, self._snap_point((x, y)))
         elif self.mode == "moving":
             dx = x - self._drag_start[0]
             dy = y - self._drag_start[1]
             left, top, right, bottom = self._rect_start
-            self.rect = self._clamp(left + dx, top + dy, right + dx, bottom + dy)
+            self.rect = self._snap_moved_rect(
+                self._clamp(left + dx, top + dy, right + dx, bottom + dy)
+            )
         elif self.mode == "resizing":
-            self.rect = self._resize(x, y)
+            self.rect = self._resize(*self._snap_point((x, y)))
         else:
             self._update_cursor(x, y)
             if self.detect_windows and self.rect is None:
@@ -328,6 +360,39 @@ class RegionSelector(Gtk.Window):
             callback, self.on_cancel = self.on_cancel, None
             callback()
             self.on_done = None
+
+    # ------------------------------------------------------------------ snapping
+    def _snap_point(self, point):
+        if not self.snap_enabled or (not self._snap_x and not self._snap_y):
+            return point
+        return (
+            snap_value(point[0], self._snap_x),
+            snap_value(point[1], self._snap_y),
+        )
+
+    def _snap_moved_rect(self, rect):
+        if not self.snap_enabled:
+            return rect
+        x, y, width, height = rect
+
+        def best_delta(edges, lines):
+            best = None
+            for edge in edges:
+                for line in lines:
+                    delta = line - edge
+                    if abs(delta) <= SNAP_DISTANCE and (
+                        best is None or abs(delta) < abs(best)
+                    ):
+                        best = delta
+            return best
+
+        dx = best_delta((x, x + width), self._snap_x)
+        dy = best_delta((y, y + height), self._snap_y)
+        if dx is None and dy is None:
+            return rect
+        x = max(0, min(x + (dx or 0), self.base.width - width))
+        y = max(0, min(y + (dy or 0), self.base.height - height))
+        return (int(x), int(y), width, height)
 
     # ------------------------------------------------------------------ geometry
     def _center_rect(self, cx, cy, width, height):
@@ -516,12 +581,21 @@ class RegionSelector(Gtk.Window):
             if self.fixed_size:
                 self._draw_hint(cr, "Mueve el raton y haz clic para capturar   Esc: cancelar")
             elif self.rect:
-                self._draw_hint(cr, "Arrastra para mover/redimensionar   Enter o doble clic: capturar   Esc: cancelar")
+                magnet = "M: sin iman" if self.snap_enabled else "M: iman"
+                self._draw_hint(
+                    cr,
+                    "Mover/redimensionar   Enter: capturar   L: lazo   "
+                    f"{magnet}   Esc: cancelar",
+                )
         else:
             cr.set_source_rgba(0, 0, 0, 0.25)
             cr.paint()
             if not self.mode:
-                self._draw_hint(cr, "Arrastra para seleccionar una region   Esc: cancelar")
+                magnet = "M: sin iman" if self.snap_enabled else "M: iman"
+                self._draw_hint(
+                    cr,
+                    f"Arrastra para seleccionar   L: lazo   {magnet}   Esc: cancelar",
+                )
         return False
 
     def _draw_freehand(self, cr):
@@ -547,7 +621,9 @@ class RegionSelector(Gtk.Window):
         if self.rect:
             rx, ry, rw, rh = self.rect
             self._draw_badge(cr, rx, ry, f"{rw} x {rh} px")
-        self._draw_hint(cr, "Dibuja una forma para capturar   Esc: cancelar")
+        self._draw_hint(
+            cr, "Dibuja una forma para capturar   L: rectangulo   Esc: cancelar"
+        )
 
     def _draw_handles(self, cr):
         cr.set_source_rgb(0.11, 0.65, 0.98)

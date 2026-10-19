@@ -371,7 +371,12 @@ class Application:
                 return False
             if mode == "region" and rect is None:
                 base = capture.capture_screen()
-                selector = RegionSelector(base, self._finish_capture, on_cancel=self._on_capture_cancelled)
+                selector = RegionSelector(
+                    base,
+                    self._finish_capture,
+                    on_cancel=self._on_capture_cancelled,
+                    snap_enabled=self.config.get("snap_enabled", True),
+                )
 
                 original_accept = selector._finish_accept
 
@@ -394,6 +399,7 @@ class Application:
                     base, self._finish_capture,
                     on_cancel=self._on_capture_cancelled,
                     fixed_size=size,
+                    snap_enabled=self.config.get("snap_enabled", True),
                 )
 
                 original_accept = selector._finish_accept
@@ -410,6 +416,7 @@ class Application:
                     base, self._finish_capture,
                     on_cancel=self._on_capture_cancelled,
                     freehand=True,
+                    snap_enabled=self.config.get("snap_enabled", True),
                 )
 
                 original_freehand = selector._finish_freehand
@@ -541,11 +548,14 @@ class Application:
                 widget.hide()
                 widget.stop()
         if overlay is None:
-            overlay = DesktopOverlay(mode)
+            overlay = DesktopOverlay(
+                mode, snap_enabled=self.config.get("snap_enabled", True)
+            )
             overlay.connect("hide", lambda *_: self._sync_escape_grab())
             self._overlays[mode] = overlay
         else:
             overlay.set_mode(mode)
+            overlay.snap_enabled = bool(self.config.get("snap_enabled", True))
             overlay.reset()
             overlay.show_all()
             if overlay.interactive:
@@ -816,6 +826,13 @@ class PreferencesDialog(Gtk.Dialog):
         )
         box.pack_start(self.show_bar_check, False, False, 0)
 
+        self.snap_check = Gtk.CheckButton(label="Activar imanes (seleccion magnetica)")
+        self.snap_check.set_active(self.config.get("snap_enabled", True))
+        self.snap_check.set_tooltip_text(
+            "Acopla las selecciones a bordes de pantalla, ventanas y texto/UI."
+        )
+        box.pack_start(self.snap_check, False, False, 0)
+
         zoom_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         zoom_row.pack_start(
             Gtk.Label(label="Zoom del selector de color:"), False, False, 0
@@ -963,6 +980,7 @@ class PreferencesDialog(Gtk.Dialog):
         self.config["copy_to_clipboard"] = self.clipboard_check.get_active()
         self.config["capture_cursor"] = self.cursor_check.get_active()
         self.config["show_capture_bar"] = self.show_bar_check.get_active()
+        self.config["snap_enabled"] = self.snap_check.get_active()
         self.config["color_zoom"] = int(self.color_zoom_spin.get_value())
         self.config["delay_seconds"] = int(self.delay_spin.get_value())
         self.config["fixed_region_size"] = [

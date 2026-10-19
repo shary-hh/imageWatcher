@@ -15,9 +15,12 @@ Python + GTK3 + Pillow + Xlib.
 - Pantalla completa (todos los monitores).
 - Ventana activa (con decoraciones).
 - Region seleccionable con el raton, con resaltado de ventana al pasar el cursor.
-  La seleccion se puede **mover** (arrastrando desde dentro) y **redimensionar**
-  (tiradores de esquinas/bordes) antes de confirmar con **Enter** o doble clic
-  (**Esc** cancela). Muestra el tamano en px.
+  Tiene **imanes** que acoplan los bordes a ventanas, pantalla y lineas de
+  texto/UI (se activan/desactivan en **Preferencias > General** o con **M**),
+  y se puede cambiar a **lazo** con la tecla **L**. La seleccion se
+  puede **mover** (arrastrando desde dentro) y **redimensionar** (tiradores de
+  esquinas/bordes) antes de confirmar con **Enter** o doble clic (**Esc** cancela).
+  Muestra el tamano en px.
 - Repetir la ultima captura.
 - Captura con retardo configurable.
 - Copia automatica al portapapeles y autoguardado opcional.
@@ -56,7 +59,7 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 - **Punto de mira**: arrastra desde cualquier punto o haz clic en dos esquinas
   para medir el rectangulo; muestra **Ancho x Alto (px)** y copia las medidas al
   cerrar. Tiene **imanes** que acoplan la seleccion a bordes de ventanas,
-  bordes de pantalla y lineas de texto/UI.
+  bordes de pantalla y lineas de texto/UI (tecla **M** o Preferencias).
 - **Regla de pixeles**: clic en el origen y clic en el destino para medir la
   distancia (linea con marcas, en **px/cm** y `dx`/`dy`). Se copia y cierra.
 - **Transportador**: clic en el vertice y clic en el primer brazo, y el angulo sigue

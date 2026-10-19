@@ -12,23 +12,23 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
-from PIL import Image, ImageFilter  # noqa: E402
+from PIL import Image  # noqa: E402
 
 from .. import ui  # noqa: E402
 from ..capture import (
     capture_region,
     capture_screen,
-    list_windows,
     virtual_screen_size,
 )  # noqa: E402
 from ..gtk_util import get_pointer_position  # noqa: E402
+from ..snap import (  # noqa: E402
+    SNAP_DISTANCE,
+    build_snap_lines,
+    snap_value,
+)
 
 # Modos que se dibujan sobre el escritorio (overlay click-through).
 OPEN_OVERLAY_MODES = ("magnifier", "ruler", "crosshair", "protractor")
-
-SNAP_DISTANCE = 12
-SNAP_EDGE_LINES = 32
-SNAP_EDGE_WIDTH = 480
 
 
 def _enable_transparency(window):
@@ -39,10 +39,11 @@ def _enable_transparency(window):
 
 
 class DesktopOverlay(Gtk.Window):
-    def __init__(self, mode="crosshair"):
+    def __init__(self, mode="crosshair", snap_enabled=True):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         ui.install_theme()
         self.mode = mode
+        self.snap_enabled = bool(snap_enabled)
         # Mira, regla y transportador son interactivos (se usan con clics).
         self.interactive = mode in ("crosshair", "ruler", "protractor")
         self.anchor = None
@@ -143,7 +144,7 @@ class DesktopOverlay(Gtk.Window):
         self._flash = None
         self.pointer = get_pointer_position()
         self._last_pos = None
-        if self.mode == "crosshair":
+        if self.mode == "crosshair" and self.snap_enabled:
             try:
                 self._snapshot = capture_screen()
             except Exception:
@@ -155,78 +156,19 @@ class DesktopOverlay(Gtk.Window):
         if hasattr(self, "area"):
             self.area.queue_draw()
 
-    @staticmethod
-    def _peak_lines(values, scale):
-        if not values:
-            return []
-        top = max(values)
-        if top <= 0:
-            return []
-        average = sum(values) / len(values)
-        threshold = max(16.0, average * 1.5)
-        ranked = sorted(
-            ((value, index) for index, value in enumerate(values) if value >= threshold),
-            reverse=True,
-        )
-        chosen = []
-        for _value, index in ranked:
-            if all(abs(index - other) >= 3 for other in chosen):
-                chosen.append(index)
-                if len(chosen) >= SNAP_EDGE_LINES:
-                    break
-        return [index * scale for index in chosen]
-
-    def _detect_screen_lines(self):
-        if self._snapshot is None:
-            return [], []
-        image = self._snapshot
-        width, height = image.size
-        if width <= 0 or height <= 0:
-            return [], []
-        scale = max(1, round(width / SNAP_EDGE_WIDTH))
-        small = image.convert("L").resize(
-            (max(1, width // scale), max(1, height // scale))
-        )
-        edges = small.filter(ImageFilter.FIND_EDGES)
-        resample = getattr(Image, "Resampling", Image).BOX
-        rows = list(edges.resize((1, edges.height), resample).getdata())
-        columns = list(edges.resize((edges.width, 1), resample).getdata())
-        return self._peak_lines(columns, scale), self._peak_lines(rows, scale)
-
     def _build_snap_lines(self):
         self._snap_x = []
         self._snap_y = []
         if self._snapshot is None:
             return
-        width, height = self._snapshot.size
-        xs = {0, max(0, width - 1)}
-        ys = {0, max(0, height - 1)}
-        try:
-            for window in list_windows():
-                xs.update((window.x, window.x + window.width - 1))
-                ys.update((window.y, window.y + window.height - 1))
-        except Exception:
-            pass
-        try:
-            edge_x, edge_y = self._detect_screen_lines()
-            xs.update(edge_x)
-            ys.update(edge_y)
-        except Exception:
-            pass
-        self._snap_x = sorted(x for x in xs if 0 <= x < width)
-        self._snap_y = sorted(y for y in ys if 0 <= y < height)
+        self._snap_x, self._snap_y = build_snap_lines(self._snapshot)
 
     @staticmethod
     def _snap_value(value, lines, distance=SNAP_DISTANCE):
-        best = None
-        for line in lines:
-            delta = abs(line - value)
-            if delta <= distance and (best is None or delta < abs(best - value)):
-                best = line
-        return value if best is None else best
+        return snap_value(value, lines, distance)
 
     def _snap(self, point):
-        if not self._snap_x and not self._snap_y:
+        if not self.snap_enabled or (not self._snap_x and not self._snap_y):
             return point
         return (
             self._snap_value(point[0], self._snap_x),
@@ -304,6 +246,17 @@ class DesktopOverlay(Gtk.Window):
         if event.keyval == Gdk.KEY_Escape:
             self.hide()
             self.stop()
+            return True
+        if event.keyval in (Gdk.KEY_m, Gdk.KEY_M) and self.mode == "crosshair":
+            self.snap_enabled = not self.snap_enabled
+            if self.snap_enabled:
+                if self._snapshot is None:
+                    try:
+                        self._snapshot = capture_screen()
+                    except Exception:
+                        self._snapshot = None
+                self._build_snap_lines()
+            self.area.queue_draw()
             return True
         if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
             if self.mode == "ruler" and self.points:
@@ -511,15 +464,20 @@ class DesktopOverlay(Gtk.Window):
         if self._flash:
             self._coord_box(cr, 20, 62, self._flash)
         elif self.anchor is None:
+            magnet = "M: sin iman" if self.snap_enabled else "M: iman"
             self._coord_box(
                 cr,
                 20,
                 62,
-                "Arrastra o clic en dos esquinas (iman a ventanas/textos)   Esc: cerrar",
+                f"Arrastra o clic en dos esquinas   {magnet}   Esc: cerrar",
             )
         else:
+            magnet = "M: sin iman" if self.snap_enabled else "M: iman"
             self._coord_box(
-                cr, 20, 62, "Mueve el raton y clic para copiar el tamano   Esc: cerrar"
+                cr,
+                20,
+                62,
+                f"Mueve el raton y clic para copiar el tamano   {magnet}   Esc: cerrar",
             )
 
     def _draw_ruler(self, cr):

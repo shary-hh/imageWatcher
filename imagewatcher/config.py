@@ -18,6 +18,7 @@ DEFAULTS = {
     "open_editor": True,
     "capture_cursor": False,
     "show_capture_bar": True,
+    "snap_enabled": True,
     "delay_seconds": 3,
     "last_region": None,
     "fixed_region_size": [360, 360],

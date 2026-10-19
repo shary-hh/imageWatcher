@@ -13,6 +13,7 @@ def test_defaults_and_persistence(monkeypatch, tmp_path):
     assert cfg.get("save_format") == "png"
     assert cfg.get("copy_to_clipboard") is True
     assert cfg.get("show_capture_bar") is True
+    assert cfg.get("snap_enabled") is True
     assert cfg.get("color_zoom") == 11
 
     cfg["save_format"] = "jpg"

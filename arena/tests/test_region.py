@@ -12,6 +12,9 @@ class _Mouse:
 def _selector(pump):
     selector = RegionSelector(Image.new("RGBA", (800, 600), (0, 0, 0, 255)), lambda img: None)
     pump(120)
+    # Los imanes dependen del escritorio real; se desactivan salvo en sus tests.
+    selector._snap_x = []
+    selector._snap_y = []
     return selector
 
 
@@ -37,6 +40,75 @@ def test_region_resizes_from_corner(pump):
         selector._rect_start = selector._ltrb(selector.rect)
         selector._on_motion(None, _Mouse(500, 500))
         assert selector.rect == (100, 100, 400, 400)
+    finally:
+        selector.destroy()
+
+
+def test_region_snaps_new_selection_and_edges(pump):
+    selector = _selector(pump)
+    try:
+        selector._snap_x = [100, 400]
+        selector._snap_y = [200]
+        selector._on_press(None, _Mouse(105, 195))
+        assert selector.mode == "creating"
+        assert selector._drag_start == (100, 200)
+        selector._on_motion(None, _Mouse(395, 305))
+        assert selector.rect == (100, 200, 300, 105)
+    finally:
+        selector.destroy()
+
+
+def test_region_snaps_moved_rect_edges(pump):
+    selector = _selector(pump)
+    try:
+        selector._snap_x = [400]
+        selector._snap_y = []
+        selector.rect = (300, 50, 90, 100)
+        selector.mode = "moving"
+        selector._drag_start = (300, 50)
+        selector._rect_start = selector._ltrb(selector.rect)
+        selector._on_motion(None, _Mouse(305, 55))
+        assert selector.rect == (310, 55, 90, 100)
+    finally:
+        selector.destroy()
+
+
+def test_region_lasso_toggle(pump):
+    from types import SimpleNamespace
+
+    from gi.repository import Gdk
+
+    selector = _selector(pump)
+    try:
+        assert selector.freehand_mode is False
+        assert selector._on_key(None, SimpleNamespace(keyval=Gdk.KEY_l)) is True
+        assert selector.freehand_mode is True
+        assert selector._on_key(None, SimpleNamespace(keyval=Gdk.KEY_L)) is True
+        assert selector.freehand_mode is False
+    finally:
+        selector.destroy()
+
+
+def test_region_can_disable_magnets(pump):
+    from types import SimpleNamespace
+
+    from gi.repository import Gdk
+
+    selector = RegionSelector(
+        Image.new("RGBA", (800, 600), (0, 0, 0, 255)),
+        lambda image: None,
+        snap_enabled=False,
+    )
+    pump(120)
+    try:
+        assert selector.snap_enabled is False
+        assert selector._snap_x == [] and selector._snap_y == []
+        selector._snap_x = [100]
+        selector._snap_y = [200]
+        assert selector._snap_point((105, 195)) == (105, 195)
+        assert selector._on_key(None, SimpleNamespace(keyval=Gdk.KEY_m)) is True
+        assert selector.snap_enabled is True
+        assert selector._snap_point((105, 195)) == (100, 200)
     finally:
         selector.destroy()
 
