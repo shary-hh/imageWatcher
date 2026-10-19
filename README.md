@@ -164,10 +164,15 @@ guia de uso y salir. Deja el campo vacio para desactivar un atajo.
 > las combinaciones por defecto.
 
 ## Atajos del editor
-`Ctrl+Z` deshacer, `Ctrl+Y` rehacer, `Ctrl+S` guardar, `Ctrl+C` copiar,
-`Ctrl+0` ajustar a ventana, `rueda` o `Ctrl++`/`Ctrl+-` zoom,
-`V`/`H` herramienta **Mover**, `Shift+rueda`, barras de scroll, boton central
-o arrastrar con la herramienta **Mover** = desplazar.
+Como el visor de imagenes: `Ctrl+O` abrir, `Ctrl+S` guardar, `Ctrl+Shift+S`
+guardar como, `Ctrl+P` imprimir, `Ctrl+W` cerrar, `Ctrl+Z` deshacer,
+`Ctrl+Shift+Z`/`Ctrl+Y` rehacer.
+
+`rueda`, `+` o `-`: zoom; `F`: ajustar a ventana; `Ctrl+0`: tamano real (100%);
+`1`: alternar 100%/ajustar; `F11`: pantalla completa; `Alt+flechas`: desplazar;
+`Ctrl+R`/`Ctrl+Shift+R`: rotar. La herramienta **Mover** esta activa al abrir:
+arrastra con el boton izquierdo o usa el boton central, `Shift+rueda` o las
+barras de scroll.
 
 ## Arena de pruebas (sandbox)
 

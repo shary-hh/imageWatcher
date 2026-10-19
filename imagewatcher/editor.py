@@ -212,7 +212,7 @@ class EditorWindow(Gtk.Window):
             ("redo", "Rehacer (Ctrl+Y)", lambda *_: self._redo()),
             ("zoom-out", "Alejar", lambda *_: self._zoom(0.8)),
             ("zoom-in", "Acercar", lambda *_: self._zoom(1.25)),
-            ("fit", "Ajustar a ventana (Ctrl+0)", lambda *_: self._fit_to_window()),
+            ("fit", "Ajustar a ventana (F)", lambda *_: self._fit_to_window()),
         ]:
             bar.pack_start(ui.glyph_button(kind, tooltip, callback))
 
@@ -310,7 +310,8 @@ class EditorWindow(Gtk.Window):
             self.tool_buttons[tool_id] = button
             if tool_id in group_ends:
                 outer.pack_start(self._separator(), False, False, 4)
-        self.tool_buttons["pen"].set_active(True)
+        self.tool_buttons["move"].set_active(True)
+        self.tool = "move"
         return outer
 
     def _build_optionsbar(self):
@@ -347,8 +348,7 @@ class EditorWindow(Gtk.Window):
 
         hint = Gtk.Label(
             label=(
-                "Rueda: zoom  -  Shift+rueda: desplazar  -  "
-                "Herramienta Mover o boton central: arrastrar"
+                "Rueda / + / -: zoom  -  F: ajustar  -  Alt+flechas o arrastrar: mover"
             )
         )
         hint.get_style_context().add_class("dim")
@@ -589,36 +589,98 @@ class EditorWindow(Gtk.Window):
         self._zoom(factor)
         return True
 
+    def _pan_by(self, dx, dy):
+        hadj = self.scroller.get_hadjustment()
+        vadj = self.scroller.get_vadjustment()
+        if hadj is not None:
+            hadj.set_value(self._clamp_adjustment(hadj, hadj.get_value() + dx))
+        if vadj is not None:
+            vadj.set_value(self._clamp_adjustment(vadj, vadj.get_value() + dy))
+
+    def _toggle_actual_size(self):
+        if self._auto_fit:
+            self._set_zoom(1.0)
+        else:
+            self._fit_to_window()
+
+    def _toggle_fullscreen(self):
+        if self.is_fullscreen():
+            self.unfullscreen()
+        else:
+            self.fullscreen()
+
     def _on_key(self, _widget, event):
-        if not event.state & (
-            Gdk.ModifierType.CONTROL_MASK
-            | Gdk.ModifierType.MOD1_MASK
-            | Gdk.ModifierType.SUPER_MASK
+        control = event.state & Gdk.ModifierType.CONTROL_MASK
+        alt = event.state & Gdk.ModifierType.MOD1_MASK
+        shift = event.state & Gdk.ModifierType.SHIFT_MASK
+        super_mod = event.state & Gdk.ModifierType.SUPER_MASK
+
+        # Como el visor de imagenes: Alt+flechas desplaza la vista.
+        if alt and event.keyval in (
+            Gdk.KEY_Left, Gdk.KEY_Right, Gdk.KEY_Up, Gdk.KEY_Down,
         ):
-            if event.keyval in (Gdk.KEY_v, Gdk.KEY_h):
-                self._select_tool("move")
-                return True
-        if event.state & Gdk.ModifierType.CONTROL_MASK:
+            dx = 60 if event.keyval == Gdk.KEY_Right else -60 if event.keyval == Gdk.KEY_Left else 0
+            dy = 60 if event.keyval == Gdk.KEY_Down else -60 if event.keyval == Gdk.KEY_Up else 0
+            self._pan_by(dx, dy)
+            return True
+
+        if control:
             if event.keyval == Gdk.KEY_z:
-                self._undo()
+                self._redo() if shift else self._undo()
                 return True
-            if event.keyval in (Gdk.KEY_y,):
+            if event.keyval == Gdk.KEY_y:
                 self._redo()
                 return True
             if event.keyval == Gdk.KEY_s:
-                self._save_file()
+                self._save_file_as() if shift else self._save_file()
                 return True
             if event.keyval == Gdk.KEY_c:
                 self._copy_clipboard()
                 return True
-            if event.keyval == Gdk.KEY_0:
-                self._fit_to_window()
+            if event.keyval in (Gdk.KEY_0, Gdk.KEY_KP_0):
+                self._set_zoom(1.0)
                 return True
             if event.keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
                 self._zoom(1.25)
                 return True
             if event.keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
                 self._zoom(0.8)
+                return True
+            if event.keyval == Gdk.KEY_o:
+                self._open_file()
+                return True
+            if event.keyval == Gdk.KEY_p:
+                self._print_image()
+                return True
+            if event.keyval == Gdk.KEY_w:
+                self.close()
+                return True
+            if event.keyval == Gdk.KEY_r:
+                self._apply_effect("rotate_ccw" if shift else "rotate_cw")
+                return True
+            return False
+
+        if not super_mod:
+            if event.keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
+                self._zoom(1.25)
+                return True
+            if event.keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
+                self._zoom(0.8)
+                return True
+            if event.keyval == Gdk.KEY_f:
+                self._fit_to_window()
+                return True
+            if event.keyval == Gdk.KEY_1:
+                self._toggle_actual_size()
+                return True
+            if event.keyval in (Gdk.KEY_v, Gdk.KEY_h):
+                self._select_tool("move")
+                return True
+            if event.keyval == Gdk.KEY_F11:
+                self._toggle_fullscreen()
+                return True
+            if event.keyval == Gdk.KEY_Escape and self.is_fullscreen():
+                self.unfullscreen()
                 return True
         return False
 

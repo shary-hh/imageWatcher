@@ -147,6 +147,58 @@ def test_move_tool_pans_with_left_button(editor, pump):
     assert editor.panning is None
 
 
+def test_default_tool_is_move(editor):
+    assert editor.tool == "move"
+
+
+def test_viewer_keyboard_shortcuts(editor):
+    from types import SimpleNamespace
+
+    from gi.repository import Gdk
+
+    def key(keyval, state=0):
+        return SimpleNamespace(keyval=keyval, state=state)
+
+    editor._set_zoom(2.0)
+    assert editor._on_key(editor, key(Gdk.KEY_plus)) is True
+    assert editor.scale > 2.0
+    zoomed = editor.scale
+    assert editor._on_key(editor, key(Gdk.KEY_minus)) is True
+    assert editor.scale < zoomed
+
+    editor._set_zoom(2.0)
+    assert editor._on_key(
+        editor, key(Gdk.KEY_0, Gdk.ModifierType.CONTROL_MASK)
+    ) is True
+    assert editor.scale == 1.0
+
+    editor._set_zoom(2.0)
+    assert editor._on_key(editor, key(Gdk.KEY_f)) is True
+    assert editor._auto_fit is True
+
+    editor._set_zoom(2.0)
+    assert editor._on_key(editor, key(Gdk.KEY_1)) is True
+    assert editor._auto_fit is True
+
+
+def test_alt_arrows_pan(editor, pump):
+    from types import SimpleNamespace
+
+    from gi.repository import Gdk
+
+    editor._set_zoom(2.0)
+    pump(200)
+    vadj = editor.scroller.get_vadjustment()
+    maximum = max(0.0, vadj.get_upper() - vadj.get_page_size())
+    start = min(100.0, maximum)
+    vadj.set_value(start)
+    event = SimpleNamespace(
+        state=Gdk.ModifierType.MOD1_MASK, keyval=Gdk.KEY_Down
+    )
+    assert editor._on_key(editor, event) is True
+    assert abs(vadj.get_value() - min(start + 60.0, maximum)) < 0.01
+
+
 def test_move_tool_keyboard_shortcut(editor):
     from types import SimpleNamespace
 
