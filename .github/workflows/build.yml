@@ -1,0 +1,72 @@
+name: build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  arena:
+    name: Arena de pruebas (pytest, Linux/X11)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
+            python3-pil python3-xlib python3-pip ffmpeg xvfb x11-utils
+      - name: Instalar pytest
+        run: python3 -m pip install --break-system-packages -r requirements-dev.txt
+      - name: Ejecutar la arena
+        run: arena/run_arena.sh -v
+
+  linux-packages:
+    name: .deb + AppImage
+    runs-on: ubuntu-24.04
+    needs: arena
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
+            python3-pil python3-xlib ffmpeg curl
+      - name: Construir .deb
+        run: packaging/build_deb.sh
+      - name: Construir AppImage
+        run: packaging/build_appimage.sh
+        env:
+          ARCH: x86_64
+      - name: Subir artefactos
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            dist/*.deb
+            dist/*.AppImage
+
+  windows-exe:
+    name: .exe (best effort)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar PyGObject (MSYS2/gvsbuild)
+        continue-on-error: true
+        run: |
+          pip install pyinstaller pillow
+          pip install pygobject
+      - name: Generar .exe
+        run: powershell -ExecutionPolicy Bypass -File packaging/windows/build_exe.ps1
+      - name: Subir .exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/imageWatcher.exe
+        if-no-files-found: warn
