@@ -114,18 +114,64 @@ def _mean_abs_diff(image_a, image_b):
     return sum(stat.mean) / len(stat.mean) if stat.mean else 0.0
 
 
-def find_vertical_shift(previous, current, band_height=24, min_shift=1):
-    """Busca en que fila de ``previous`` encaja la banda superior de ``current``.
+ROW_SAMPLE_WIDTH = 64
+STATIC_ROW_THRESHOLD = 1.5
+STATIC_ROW_RUN = 8
 
-    Devuelve ``(shift, diff)``: el desplazamiento vertical y la diferencia media.
+
+def _row_diff_means(previous, current, sample_width=ROW_SAMPLE_WIDTH):
+    """Diferencia media por fila entre dos imagenes alineadas arriba."""
+    height = min(previous.height, current.height)
+    width = min(previous.width, current.width)
+    if height <= 0 or width <= 0:
+        return []
+    sample_width = max(1, min(sample_width, width))
+    a = previous.convert("L").crop((0, 0, width, height)).resize((sample_width, height))
+    b = current.convert("L").crop((0, 0, width, height)).resize((sample_width, height))
+    data = list(ImageChops.difference(a, b).getdata())
+    return [
+        sum(data[y * sample_width : (y + 1) * sample_width]) / sample_width
+        for y in range(height)
+    ]
+
+
+def _scrolling_content_top(previous, current):
+    """Primera fila de contenido que se mueve entre dos capturas.
+
+    Las barras de pestañas/direccion del navegador y las cabeceras fijas no
+    cambian al hacer scroll. Tomar la banda de alineacion desde ahi haria que
+    cada frame coincidiera consigo mismo (shift 0) y no se empalmara nada.
+    """
+    run = 0
+    for y, value in enumerate(_row_diff_means(previous, current)):
+        if value > STATIC_ROW_THRESHOLD:
+            run += 1
+            if run >= STATIC_ROW_RUN:
+                return y - STATIC_ROW_RUN + 1
+        else:
+            run = 0
+    return 0
+
+
+def find_vertical_shift(previous, current, band_height=24, min_shift=1):
+    """Busca en que fila de ``previous`` encaja una banda de ``current``.
+
+    La banda se toma del contenido que realmente se desplaza, no de la
+    cabecera fija de la ventana. Devuelve ``(shift, diff)``.
     """
     band_height = min(band_height, current.height)
-    band = current.convert("RGB").crop((0, 0, current.width, band_height))
+    width = min(previous.width, current.width)
+    offset = _scrolling_content_top(previous, current)
+    offset = max(0, min(offset, previous.height - band_height - min_shift))
+    band = current.convert("RGB").crop((0, offset, width, offset + band_height))
     best_shift = 0
     best_diff = None
     last = previous.height - band_height
     for shift in range(min_shift, max(min_shift, last) + 1):
-        window = previous.convert("RGB").crop((0, shift, current.width, shift + band_height))
+        top = offset + shift
+        if top + band_height > previous.height:
+            break
+        window = previous.convert("RGB").crop((0, top, width, top + band_height))
         diff = _mean_abs_diff(band, window)
         if best_diff is None or diff < best_diff:
             best_diff, best_shift = diff, shift

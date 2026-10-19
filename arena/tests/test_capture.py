@@ -144,6 +144,25 @@ def test_scroll_targets_active_window_center(monkeypatch):
     assert len(events) == 2
 
 
+def test_scroll_stitch_ignores_static_header():
+    """Una cabecera fija (p. ej. la barra del navegador) no debe impedir el empalme."""
+    from PIL import Image
+
+    base = _noise_image(120, 900)
+    header = _noise_image(120, 80, seed=7)
+    frame1 = Image.new("RGB", (120, 480))
+    frame1.paste(header, (0, 0))
+    frame1.paste(base.crop((0, 0, 120, 400)), (0, 80))
+    frame2 = Image.new("RGB", (120, 480))
+    frame2.paste(header, (0, 0))
+    frame2.paste(base.crop((0, 160, 120, 560)), (0, 80))
+
+    shift, _diff = capture.find_vertical_shift(frame1, frame2)
+    assert shift == 160
+    stitched = capture.stitch_vertical([frame1, frame2])
+    assert stitched.height == 640
+
+
 def test_stitch_vertical_reconstructs_long_window():
     base = _noise_image(120, 600)
     frames = [
