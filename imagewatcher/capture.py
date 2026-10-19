@@ -256,7 +256,7 @@ def find_vertical_shift(
     return best_seen or (0, 0.0)
 
 
-BOTTOM_GUARD = 96
+BOTTOM_GUARD = 200
 
 
 def _append_vertical(result, part):
@@ -278,10 +278,7 @@ def stitch_vertical(frames):
     first = frames[0]
     if len(frames) == 1:
         return first
-    # El borde inferior del primer frame tambien puede tener un overlay fijo;
-    # se omite y se recupera del siguiente frame, igual que en los demas.
-    guard = min(BOTTOM_GUARD, max(0, first.height // 2))
-    result = first.crop((0, 0, first.width, first.height - guard))
+    result = None
     previous_frame = first
     total_shift = 0
     for frame in frames[1:]:
@@ -297,16 +294,24 @@ def stitch_vertical(frames):
         if step <= 2:
             previous_frame = frame
             continue
-        total_shift += step
         # No tomar el borde inferior de cada frame: ahi suelen vivir botones
         # fijos ("volver arriba", chat...). Ese contenido se recupera del
-        # frame siguiente, donde ya ha subido y no esta tapado.
-        guard = min(BOTTOM_GUARD, max(0, frame.height // 2))
+        # frame siguiente, donde ya ha subido y no esta tapado. El margen no
+        # puede superar el solape disponible con el frame siguiente.
+        guard = min(BOTTOM_GUARD, max(0, frame.height - step - 4))
+        if result is None:
+            first_guard = min(BOTTOM_GUARD, max(0, first.height - step - 4))
+            result = first.crop(
+                (0, 0, first.width, first.height - first_guard)
+            )
+        total_shift += step
         start = max(0, result.height - total_shift)
         end = frame.height - guard
         if end > start:
             result = _append_vertical(result, frame.crop((0, start, frame.width, end)))
         previous_frame = frame
+    if result is None:
+        return first
     # El ultimo trozo (incluido el borde inferior) se toma una sola vez.
     last = frames[-1]
     start = max(0, result.height - total_shift)
@@ -411,19 +416,24 @@ def capture_scrolling_window(max_scrolls=100):
     if geom is None:
         return capture_screen()
     frames = [capture_region(*geom.as_tuple())]
+    stalls = 0
     for _ in range(max_scrolls):
         previous = frames[-1]
         if not _scroll_active_window(1, geom=geom):
             break
         frame = _capture_settled(geom, previous)
-        if _mean_abs_diff(previous, frame) < SCROLL_DIFF:
-            break
         step, _diff = find_vertical_shift(
             previous, frame, min_shift=1, max_shift=geom.height
         )
-        if step <= 2:
-            # La pagina ya no se desplaza; solo hay animaciones.
-            break
+        if _mean_abs_diff(previous, frame) < SCROLL_DIFF or step <= 2:
+            # Puede ser el final de la pagina o una carga/animacion temporal.
+            # Reintentar antes de darla por terminada.
+            stalls += 1
+            if stalls >= 3:
+                break
+            time.sleep(0.15)
+            continue
+        stalls = 0
         frames.append(frame)
     return stitch_vertical(frames)
 

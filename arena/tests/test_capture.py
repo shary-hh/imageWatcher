@@ -163,6 +163,28 @@ def test_scroll_stitch_ignores_static_header():
     assert stitched.height == 640
 
 
+def test_stitch_avoids_repeating_higher_fixed_overlay():
+    """Un boton fijo a mas de 96 px del borde tambien debe excluirse."""
+    from PIL import ImageDraw
+
+    base = _noise_image(120, 1000, seed=11).convert("RGBA")
+    frames = []
+    for i in range(6):
+        frame = base.crop((0, i * 100, 120, i * 100 + 400)).copy()
+        ImageDraw.Draw(frame).rectangle((100, 260, 119, 279), fill=(255, 0, 0, 255))
+        frames.append(frame)
+
+    stitched = capture.stitch_vertical(frames)
+    assert stitched.height == 900
+    red = sum(
+        1
+        for y in range(stitched.height)
+        for x in range(stitched.width)
+        if stitched.getpixel((x, y))[:3] == (255, 0, 0)
+    )
+    assert red == 20 * 20
+
+
 def test_stitch_skips_uniform_band_to_align():
     """Un fondo liso no debe confundir la alineacion; se usa una banda con textura."""
     from PIL import Image
