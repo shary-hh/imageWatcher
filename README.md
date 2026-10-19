@@ -64,7 +64,8 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 - FPS ajustable y audio del sistema opcional.
 
 ### Integracion
-- Barra de captura flotante.
+- Barra de captura flotante (se puede ocultar desde Preferencias, la bandeja
+  o un atajo global).
 - Icono en la bandeja del sistema.
 - Atajos de teclado globales (X11) configurables para capturas, editor,
   grabador, herramientas de diseno y acciones de la aplicacion.

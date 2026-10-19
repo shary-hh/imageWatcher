@@ -45,6 +45,7 @@ def test_preferences_lists_every_hotkey_action(monkeypatch, tmp_path):
     dialog = app_module.PreferencesDialog(SimpleNamespace(config=Config(), bar=None))
     expected = {action for action, _label, _group, _default in HOTKEY_ACTIONS}
     assert set(dialog.hotkey_entries) == expected
+    assert dialog.show_bar_check.get_active() is True
 
 
 def test_grab_and_release():

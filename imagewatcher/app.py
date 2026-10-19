@@ -123,6 +123,7 @@ class CaptureBar(Gtk.Window):
             ("Captura con retardo", "clock", lambda *_: self.app.do_capture("delayed")),
             ("sep", None, None),
             ("Guia de uso", None, lambda *_: self.app.show_welcome()),
+            ("Ocultar barra de captura", None, lambda *_: self.app._set_bar_visible(False)),
             ("Preferencias", "settings", lambda *_: self.app.open_preferences()),
         ]
         for label, kind, callback in items:
@@ -169,6 +170,8 @@ class Application:
         self.last_capture = None
         self.notifier = shutil_which("notify-send")
         self.bar = CaptureBar(self)
+        if not self.config.get("show_capture_bar", True):
+            self.bar.hide()
         self._tray = None
         self._build_tray()
         self._start_hotkeys()
@@ -228,7 +231,8 @@ class Application:
     def _build_menu(self):
         menu = Gtk.Menu()
         entries = [
-            ("Mostrar barra de captura", lambda *_: self.bar.present()),
+            ("Mostrar barra de captura", lambda *_: self._set_bar_visible(True, force=True)),
+            ("Ocultar barra de captura", lambda *_: self._set_bar_visible(False)),
             ("sep", None),
             ("Capturar pantalla completa", lambda *_: self.do_capture("fullscreen")),
             ("Capturar ventana activa", lambda *_: self.do_capture("window")),
@@ -309,7 +313,7 @@ class Application:
                 "hide_overlays": self._hide_overlays,
                 "preferences": self.open_preferences,
                 "welcome": self.show_welcome,
-                "show_bar": lambda: self._set_bar_visible(True),
+                "show_bar": lambda: self._set_bar_visible(True, force=True),
                 "hide_bar": lambda: self._set_bar_visible(False),
                 "quit": self.quit,
             }
@@ -320,12 +324,19 @@ class Application:
                 logger.warning("%s", failure)
 
     # -------------------------------------------------------------- capture
-    def _set_bar_visible(self, visible):
+    def _set_bar_visible(self, visible, force=False):
+        if visible and not force and not self.config.get("show_capture_bar", True):
+            return
         if visible:
             self.bar.show_all()
             self.bar.present()
         else:
             self.bar.hide()
+
+    def _apply_bar_preference(self):
+        self._set_bar_visible(
+            self.config.get("show_capture_bar", True), force=True
+        )
 
     def do_capture(self, mode):
         self._set_bar_visible(False)
@@ -781,6 +792,13 @@ class PreferencesDialog(Gtk.Dialog):
         self.cursor_check.set_active(self.config.get("capture_cursor", False))
         box.pack_start(self.cursor_check, False, False, 0)
 
+        self.show_bar_check = Gtk.CheckButton(label="Mostrar la barra de captura")
+        self.show_bar_check.set_active(self.config.get("show_capture_bar", True))
+        self.show_bar_check.set_tooltip_text(
+            "Si la desactivas, puedes mostrarla desde la bandeja o con un atajo global."
+        )
+        box.pack_start(self.show_bar_check, False, False, 0)
+
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         row.pack_start(Gtk.Label(label="Segundos de retardo:"), False, False, 0)
         adj = Gtk.Adjustment(value=self.config.get("delay_seconds", 3), lower=1, upper=60, step_increment=1)
@@ -915,6 +933,7 @@ class PreferencesDialog(Gtk.Dialog):
         self.config["open_editor"] = self.open_editor_check.get_active()
         self.config["copy_to_clipboard"] = self.clipboard_check.get_active()
         self.config["capture_cursor"] = self.cursor_check.get_active()
+        self.config["show_capture_bar"] = self.show_bar_check.get_active()
         self.config["delay_seconds"] = int(self.delay_spin.get_value())
         self.config["fixed_region_size"] = [
             int(self.fixed_width_spin.get_value()),
@@ -932,6 +951,7 @@ class PreferencesDialog(Gtk.Dialog):
         self.config.save()
         self._set_autostart(self.autostart_check.get_active())
         self.app.apply_hotkeys()
+        self.app._apply_bar_preference()
 
     def _autostart_path(self):
         return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "autostart" / f"{__app_id__}.desktop"
