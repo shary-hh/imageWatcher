@@ -35,6 +35,8 @@ FAVORITE_TOOLS = [
     ("crosshair", "Punto de mira", "crosshair"),
     ("protractor", "Transportador", "protractor"),
     ("whiteboard", "Pizarra", "pen"),
+    ("color_history", "Historial de colores", "color"),
+    ("color_format", "Formato de color", "settings"),
 ]
 FAVORITE_TOOL_MAP = {
     tool_id: (label, kind) for tool_id, label, kind in FAVORITE_TOOLS
@@ -645,6 +647,10 @@ class Application:
     def open_favorite(self, tool_id):
         if tool_id == "editor":
             self.open_editor_blank()
+        elif tool_id == "color_history":
+            self.open_color_history_menu()
+        elif tool_id == "color_format":
+            self.open_color_format_menu()
         elif tool_id in FAVORITE_TOOL_MAP:
             self.open_tool(tool_id)
 
@@ -658,14 +664,19 @@ class Application:
             submenu.append(empty)
         else:
             for tool_id in ids:
-                label, kind = FAVORITE_TOOL_MAP[tool_id]
-                submenu.append(
-                    ui.menu_item(
-                        label,
-                        kind,
-                        lambda *_, t=tool_id: self.open_favorite(t),
+                if tool_id == "color_history":
+                    submenu.append(self._color_history_menu())
+                elif tool_id == "color_format":
+                    submenu.append(self._color_format_menu())
+                else:
+                    label, kind = FAVORITE_TOOL_MAP[tool_id]
+                    submenu.append(
+                        ui.menu_item(
+                            label,
+                            kind,
+                            lambda *_, t=tool_id: self.open_favorite(t),
+                        )
                     )
-                )
         submenu.append(Gtk.SeparatorMenuItem())
         manage = Gtk.MenuItem(label="Configurar favoritos...")
         manage.connect("activate", lambda *_: self.open_preferences())
@@ -673,9 +684,7 @@ class Application:
         item.set_submenu(submenu)
         return item
 
-    def open_favorites_menu(self):
-        """Abre las herramientas favoritas en la posicion del raton."""
-        item = self._favorites_menu()
+    def _popup_menu_item(self, item):
         menu = item.get_submenu()
         menu.show_all()
         try:
@@ -696,6 +705,16 @@ class Application:
         except Exception:
             menu.popup_at_pointer(None)
         return menu
+
+    def open_favorites_menu(self):
+        """Abre las herramientas favoritas en la posicion del raton."""
+        return self._popup_menu_item(self._favorites_menu())
+
+    def open_color_history_menu(self):
+        return self._popup_menu_item(self._color_history_menu())
+
+    def open_color_format_menu(self):
+        return self._popup_menu_item(self._color_format_menu())
 
     # -------------------------------------------------------- overlays (mouse)
     def _toggle_overlay(self, mode):

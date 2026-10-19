@@ -75,7 +75,8 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
   o un atajo global).
 - Seccion de **herramientas favoritas** en la barra (boton de estrella e iconos),
   al inicio de los menus de bandeja/herramientas y con **atajo global**
-  configurable. Se eligen en **Preferencias > Favoritos**.
+  configurable. Se eligen en **Preferencias > Favoritos** e incluyen tambien
+  **Historial de colores** y **Formato de color**.
 - Menus organizados por categorias: **Favoritos**, **Capturar** y
   **Herramientas**.
 - Icono en la bandeja del sistema.

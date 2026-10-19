@@ -52,6 +52,10 @@ def test_preferences_lists_every_hotkey_action(monkeypatch, tmp_path):
     assert dialog.favorite_checks["color"].get_active() is True
     assert dialog.favorite_checks["magnifier"].get_active() is True
     assert dialog.favorite_checks["protractor"].get_active() is False
+    assert "color_history" in dialog.favorite_checks
+    assert "color_format" in dialog.favorite_checks
+    assert dialog.favorite_checks["color_history"].get_active() is False
+    assert dialog.favorite_checks["color_format"].get_active() is False
 
 
 def test_grab_and_release():

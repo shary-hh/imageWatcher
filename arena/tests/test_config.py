@@ -113,10 +113,19 @@ def test_favorite_tools_are_filtered_and_dispatched():
     calls = []
     app.open_tool = lambda name: calls.append(("tool", name))
     app.open_editor_blank = lambda: calls.append(("editor",))
+    app.open_color_history_menu = lambda: calls.append(("history",))
+    app.open_color_format_menu = lambda: calls.append(("format",))
     Application.open_favorite(app, "color")
     Application.open_favorite(app, "editor")
+    Application.open_favorite(app, "color_history")
+    Application.open_favorite(app, "color_format")
     Application.open_favorite(app, "unknown")
-    assert calls == [("tool", "color"), ("editor",)]
+    assert calls == [
+        ("tool", "color"),
+        ("editor",),
+        ("history",),
+        ("format",),
+    ]
 
 
 def test_color_history_uses_selected_format():
