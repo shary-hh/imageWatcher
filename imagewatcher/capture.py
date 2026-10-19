@@ -155,20 +155,62 @@ def stitch_vertical(frames):
     return result
 
 
-def _scroll_active_window(times=1):
-    """Envia rueda de scroll hacia abajo con XTest (best effort)."""
+SCROLL_DIFF = 0.4
+
+
+def _scroll_active_window(times=1, geom=None):
+    """Envia rueda de scroll hacia abajo sobre el centro de la ventana.
+
+    XTest entrega la rueda a la ventana que esta bajo el puntero, no a la
+    ventana activa. Si el puntero esta sobre la barra de imageWatcher (o
+    cualquier otra ventana) el destino no se desplaza y la captura se queda
+    con la parte visible. Se mueve el puntero al centro de la ventana y se
+    restaura al terminar.
+    """
     try:
         from Xlib import X
         from Xlib.ext import xtest
 
         d = _x11_display()
-        for _ in range(times):
-            xtest.fake_input(d, X.ButtonPress, 5)
-            xtest.fake_input(d, X.ButtonRelease, 5)
+        root = d.screen().root
+        if geom is None:
+            geom = active_window_geometry()
+        if geom is None or geom.width <= 0 or geom.height <= 0:
+            return False
+        screen = d.screen()
+        target_x = max(0, min(geom.x + geom.width // 2, screen.width_in_pixels - 1))
+        target_y = max(0, min(geom.y + geom.height // 2, screen.height_in_pixels - 1))
+        pointer = root.query_pointer()
+        origin_x, origin_y = pointer.root_x, pointer.root_y
+        try:
+            root.warp_pointer(target_x, target_y)
             d.sync()
+            for _ in range(times):
+                xtest.fake_input(d, X.ButtonPress, 5)
+                xtest.fake_input(d, X.ButtonRelease, 5)
+                d.sync()
+        finally:
+            try:
+                root.warp_pointer(origin_x, origin_y)
+                d.sync()
+            except Exception:
+                pass
         return True
     except Exception:
         return False
+
+
+def _capture_settled(geometry, timeout=0.6, interval=0.06):
+    """Captura esperando a que el contenido deje de moverse tras el scroll."""
+    deadline = time.monotonic() + timeout
+    frame = capture_region(*geometry.as_tuple())
+    while time.monotonic() < deadline:
+        time.sleep(interval)
+        next_frame = capture_region(*geometry.as_tuple())
+        if _mean_abs_diff(frame, next_frame) < SCROLL_DIFF:
+            return next_frame
+        frame = next_frame
+    return frame
 
 
 def capture_scrolling_window(max_scrolls=30):
@@ -179,11 +221,10 @@ def capture_scrolling_window(max_scrolls=30):
     frames = [capture_region(*geom.as_tuple())]
     for _ in range(max_scrolls):
         previous = frames[-1]
-        if not _scroll_active_window(1):
+        if not _scroll_active_window(1, geom=geom):
             break
-        time.sleep(0.12)
-        frame = capture_region(*geom.as_tuple())
-        if _mean_abs_diff(previous, frame) < 0.4:
+        frame = _capture_settled(geom)
+        if _mean_abs_diff(previous, frame) < SCROLL_DIFF:
             break
         frames.append(frame)
     return stitch_vertical(frames)

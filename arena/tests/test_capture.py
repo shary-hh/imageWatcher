@@ -119,6 +119,31 @@ def test_find_vertical_shift():
     assert shift == 220
 
 
+def test_scroll_targets_active_window_center(monkeypatch):
+    """La rueda debe enviarse sobre la ventana, no donde este el puntero."""
+    from types import SimpleNamespace
+
+    from Xlib.ext import xtest
+
+    warps = []
+    events = []
+    pointer = SimpleNamespace(root_x=6, root_y=7)
+    root = SimpleNamespace(
+        query_pointer=lambda: pointer,
+        warp_pointer=lambda x, y: warps.append((x, y)),
+    )
+    screen = SimpleNamespace(root=root, width_in_pixels=1920, height_in_pixels=1080)
+    display = SimpleNamespace(screen=lambda: screen, sync=lambda: None)
+    monkeypatch.setattr(capture, "_x11_display", lambda: display)
+    monkeypatch.setattr(xtest, "fake_input", lambda *args: events.append(args))
+
+    geometry = capture.Geometry(100, 60, 400, 200)
+    assert capture._scroll_active_window(1, geometry) is True
+    assert warps[0] == (300, 160)
+    assert warps[-1] == (6, 7)
+    assert len(events) == 2
+
+
 def test_stitch_vertical_reconstructs_long_window():
     base = _noise_image(120, 600)
     frames = [
