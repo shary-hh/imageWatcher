@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=imageWatcher
+Comment=Captura, edita y comparte la pantalla
+Exec=python3 -m imagewatcher
+Path=/home/sharyloki/picpick__
+Icon=accessories-screenshot
+Terminal=false
+Categories=Utility;Graphics;
+Keywords=captura;screenshot;editor;pantalla;

@@ -1,0 +1,4 @@
+# Dependencias solo para desarrollo/pruebas.
+# Requieren pip (python3-pip o bootstrap de pip).
+pytest>=7
+pytest-timeout>=2

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "imagewatcher"
+dynamic = ["version"]
+description = "Suite de captura, edicion y grabacion de pantalla para Linux (X11)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "imageWatcher contributors" }]
+keywords = ["screenshot", "capture", "editor", "gtk", "x11", "cinnamon"]
+classifiers = [
+    "Environment :: X11 Applications :: GTK",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics :: Capture :: Screen Capture",
+]
+# Dependencias del sistema (apt): python3-gi, gir1.2-gtk-3.0, python3-pil,
+# python3-xlib, ffmpeg. No se declaran aqui porque no son paquetes PyPI.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-timeout>=2"]
+
+[project.scripts]
+imagewatcher = "imagewatcher.app:main"
+
+[tool.setuptools]
+packages = ["imagewatcher", "imagewatcher.tools"]
+
+[tool.setuptools.dynamic]
+version = { attr = "imagewatcher.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["arena/tests"]
+addopts = "-ra --strict-markers"
+timeout = 60
+filterwarnings = ["ignore::DeprecationWarning"]
