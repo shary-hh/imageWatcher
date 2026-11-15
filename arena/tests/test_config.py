@@ -214,3 +214,39 @@ def test_color_history_accumulates(monkeypatch, tmp_path, pump):
         app._escape_grabber.stop()
         for widget in list(app._overlays.values()):
             widget.destroy()
+
+
+def test_color_history_tray_entries_show_swatch(monkeypatch, tmp_path, pump):
+    """La bandeja exporta el color como imagen (icon-data), no como texto."""
+    from gi.repository import Gtk
+
+    _patch_paths(monkeypatch, tmp_path)
+    from imagewatcher.app import Application
+
+    app = Application()
+    try:
+        app._remember_color((255, 0, 0))
+        menu = app._color_history_menu(tray=True)
+        entries = [
+            child
+            for child in menu.get_submenu().get_children()
+            if isinstance(child, Gtk.ImageMenuItem)
+        ]
+        assert entries, "el historial de la bandeja debe tener entradas"
+        image = entries[0].get_image()
+        assert image is not None
+        pixbuf = image.get_pixbuf()
+        assert pixbuf is not None
+        assert pixbuf.get_width() == pixbuf.get_height()
+        channels = pixbuf.get_n_channels()
+        center = (pixbuf.get_height() // 2) * pixbuf.get_rowstride() + (
+            pixbuf.get_width() // 2
+        ) * channels
+        assert pixbuf.get_pixels()[center:center + 3] == bytes([255, 0, 0])
+        # Esquina transparente: el swatch es un circulo, no un cuadrado.
+        assert pixbuf.get_pixels()[3] == 0
+    finally:
+        app.hotkeys.stop()
+        app._escape_grabber.stop()
+        for widget in list(app._overlays.values()):
+            widget.destroy()

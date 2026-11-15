@@ -1,5 +1,6 @@
 """Aplicacion principal: barra de captura, bandeja y orquestacion."""
 import logging
+import math
 import os
 import subprocess
 import sys
@@ -899,6 +900,29 @@ class Application:
         )
         return pixbuf.copy()
 
+    def _swatch_dot_pixbuf(self, hexv, size=16):
+        """Circulo con el color y un anillo neutro, visible en menus claros y oscuros.
+
+        Se usa en el historial. En la bandeja el pixbuf se exporta por
+        DBusMenu como `icon-data`, asi que Cinnamon muestra el color real en
+        lugar de un caracter de texto monocromo.
+        """
+        import cairo
+        from gi.repository import Gdk
+
+        r, g, b = color_picker._hex_to_rgb(hexv) or (0, 0, 0)
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size, size)
+        cr = cairo.Context(surface)
+        center = size / 2.0
+        radius = max(1.0, center - 1.5)
+        cr.arc(center, center, radius, 0, 2 * math.pi)
+        cr.set_source_rgb(r / 255.0, g / 255.0, b / 255.0)
+        cr.fill_preserve()
+        cr.set_source_rgba(0.5, 0.5, 0.5, 0.9)
+        cr.set_line_width(1.2)
+        cr.stroke()
+        return Gdk.pixbuf_get_from_surface(surface, 0, 0, size, size)
+
     def _format_color_value(self, hexv):
         rgb = color_picker._hex_to_rgb(hexv)
         if rgb is None:
@@ -932,14 +956,18 @@ class Application:
         else:
             for hexv in history:
                 value = self._format_color_value(hexv)
+                swatch = self._swatch_dot_pixbuf(hexv)
                 if tray:
-                    # DBusMenu no serializa hijos personalizados: etiqueta plana.
-                    entry = Gtk.MenuItem(label=f"● {value}")
+                    # DBusMenu exporta el pixbuf como `icon-data`; el anillo
+                    # gris mantiene visible el color en menus claros.
+                    entry = Gtk.ImageMenuItem(label=value)
+                    entry.set_image(Gtk.Image.new_from_pixbuf(swatch))
+                    entry.set_always_show_image(True)
                 else:
                     entry = Gtk.MenuItem()
                     row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
                     row.pack_start(
-                        Gtk.Image.new_from_pixbuf(self._swatch_pixbuf(hexv)),
+                        Gtk.Image.new_from_pixbuf(swatch),
                         False,
                         False,
                         0,

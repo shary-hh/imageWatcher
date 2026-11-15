@@ -416,8 +416,9 @@ GLYPH_COLOR = (0.0, 0.0, 0.0)
 GLYPH_COLOR_LIGHT = (0.87, 0.90, 0.96)
 
 # Nombres de iconos del tema para menus exportados por DBusMenu (bandeja).
-# Los menus de la bandeja no pueden mostrar GdkPixbuf propios: Cinnamon los
-# renderiza con su tema y necesita iconos nombrados/simbolicos.
+# Los iconos nombrados son los mas ligeros y los resuelve el tema del panel;
+# los pixbufs propios (por ejemplo los swatches del historial de colores) se
+# exportan igualmente como `icon-data`.
 GLYPH_ICON_NAMES = {
     "display": "video-display",
     "window": "window-new",

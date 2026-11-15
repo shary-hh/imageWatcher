@@ -48,6 +48,25 @@ def test_color_formats():
     assert color_picker.format_color((255, 0, 0), "hsv") == "hsv(0, 100%, 100%)"
 
 
+def test_color_loupe_history_wraps_inside_panel():
+    from types import SimpleNamespace
+
+    for zoom in (2, 11, 20, 40):
+        view_size = color_picker.VIEW_PIXELS * zoom
+        loupe = SimpleNamespace(
+            view_size=view_size,
+            history=[f"#{i:02X}4080" for i in range(10)],
+        )
+        size, gap, columns, height = color_picker.ColorLoupe._history_layout(loupe)
+        assert size >= 6
+        assert columns >= 1
+        assert columns * (size + gap) - gap <= view_size
+        rows = (10 + columns - 1) // columns
+        assert height == rows * size + (rows - 1) * gap
+        if zoom == 11:
+            assert columns > 1 and rows == 2
+
+
 def test_palette_history_uses_selected_format(pump):
     panel = color_picker.ColorPanel(color_format="rgb")
     try:

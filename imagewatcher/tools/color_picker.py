@@ -281,7 +281,8 @@ class ColorLoupe(Gtk.Window):
         half = VIEW_PIXELS // 2
         pad = 8
         bar_h = 46
-        hist_h = 24 if self.history else 0
+        hist_size, hist_gap, hist_cols, hist_height = self._history_layout()
+        hist_h = hist_height + 6 if hist_height else 0
         box_w = self.view_size + pad * 2
         box_h = self.view_size + pad * 2 + bar_h + hist_h
 
@@ -351,25 +352,53 @@ class ColorLoupe(Gtk.Window):
         cr.show_text(f"{self.color_format.upper()}   RGB {r}, {g}, {b}")
 
         if self.history:
-            self._draw_history(cr, origin_x, bar_y + bar_h + 4)
+            self._draw_history(
+                cr,
+                origin_x,
+                bar_y + bar_h + 4,
+                hist_size,
+                hist_gap,
+                hist_cols,
+            )
 
-    def _draw_history(self, cr, x, y):
+    def _history_layout(self):
+        """Tamano y filas del historial para que no desborde el ancho de la lupa.
+
+        Con zoom bajo el panel es muy estrecho, asi que ademas de partir el
+        historial en varias filas se reduce el tamano del swatch.
+        """
+        valid = sum(1 for stale in self.history if _hex_to_rgb(stale) is not None)
+        if not valid:
+            return 0, 0, 0, 0
         size = 18
         gap = 4
+        usable = max(1, self.view_size)
+        columns = max(1, (usable + gap) // (size + gap))
+        if columns == 1 and valid > 1:
+            size = max(6, (usable - gap) // 2)
+            columns = max(1, (usable + gap) // (size + gap))
+        rows = math.ceil(valid / columns)
+        height = rows * size + (rows - 1) * gap
+        return size, gap, columns, height
+
+    def _draw_history(self, cr, x, y, size=18, gap=4, columns=1):
+        columns = max(1, columns)
+        drawn = 0
         for stale in self.history:
             rgb = _hex_to_rgb(stale)
             if rgb is None:
                 continue
+            row, column = divmod(drawn, columns)
+            sx = x + column * (size + gap)
+            sy = y + row * (size + gap)
             cr.set_source_rgb(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255)
-            cr.rectangle(x, y, size, size)
+            cr.rectangle(sx, sy, size, size)
             cr.fill()
             cr.set_source_rgba(1, 1, 1, 0.25)
             cr.set_line_width(1)
-            cr.rectangle(x + 0.5, y + 0.5, size - 1, size - 1)
+            cr.rectangle(sx + 0.5, sy + 0.5, size - 1, size - 1)
             cr.stroke()
-            x += size + gap
-            if x + size > self.base.width:
-                break
+            drawn += 1
 
 
 class ColorPanel(Gtk.Box):
