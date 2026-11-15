@@ -1,6 +1,7 @@
 """Prueba de renderizado del editor (composicion correcta en el canvas)."""
 import cairo
 import pytest
+from gi.repository import Gtk
 from PIL import Image
 
 from imagewatcher.config import Config
@@ -28,3 +29,15 @@ def test_editor_draws_image_at_correct_position(pump):
         assert (red, green, blue) == (0, 128, 255)
     finally:
         editor.destroy()
+
+
+def test_tray_menu_uses_theme_icon_names():
+    """El menu de bandeja se exporta por DBusMenu: necesita iconos nombrados."""
+    from imagewatcher import ui
+
+    item = ui.menu_item("Pantalla completa", "display", tray=True)
+    assert isinstance(item, Gtk.ImageMenuItem)
+    image = item.get_image()
+    assert image is not None
+    icon_name = image.get_icon_name()
+    assert icon_name

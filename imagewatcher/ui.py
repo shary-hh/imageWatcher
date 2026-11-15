@@ -415,6 +415,50 @@ def toggle_icon(icon_name, tooltip=None, group=None, icon_size=18):
 GLYPH_COLOR = (0.0, 0.0, 0.0)
 GLYPH_COLOR_LIGHT = (0.87, 0.90, 0.96)
 
+# Nombres de iconos del tema para menus exportados por DBusMenu (bandeja).
+# Los menus de la bandeja no pueden mostrar GdkPixbuf propios: Cinnamon los
+# renderiza con su tema y necesita iconos nombrados/simbolicos.
+GLYPH_ICON_NAMES = {
+    "display": "video-display",
+    "window": "window-new",
+    "region": "edit-select-all",
+    "select": "edit-select-all",
+    "lasso": "edit-select-all",
+    "pen": "applications-graphics",
+    "marker": "applications-graphics",
+    "highlighter": "applications-graphics",
+    "airbrush": "applications-graphics",
+    "calligraphy": "applications-graphics",
+    "line": "insert-object",
+    "arrow": "insert-object",
+    "rect": "insert-object",
+    "ellipse": "insert-object",
+    "callout": "insert-text",
+    "text": "insert-text",
+    "stamp": "insert-text",
+    "cursor": "input-mouse",
+    "blur": "applications-graphics",
+    "pixelate": "applications-graphics",
+    "retouch": "applications-graphics",
+    "eraser": "edit-clear",
+    "fill": "color-select",
+    "undo": "edit-undo",
+    "redo": "edit-redo",
+    "zoom-in": "zoom-in",
+    "zoom-out": "zoom-out",
+    "fit": "zoom-fit-best",
+    "copy": "edit-copy",
+    "save": "document-save",
+    "record": "media-record",
+    "more": "view-more",
+    "color": "color-select",
+    "ruler": "applications-science",
+    "crosshair": "mark-location",
+    "protractor": "accessories-character-map",
+    "clock": "appointment-new",
+    "settings": "preferences-system",
+}
+
 
 def glyph_pixbuf(kind, size=22, color=GLYPH_COLOR, line=1.9):
     import cairo
@@ -723,7 +767,19 @@ def glyph_tile(kind, label, tooltip=None, on_click=None, size=22):
     return widget
 
 
-def menu_item(label, kind=None, callback=None):
+def menu_item(label, kind=None, callback=None, tray=False):
+    if tray:
+        item = Gtk.ImageMenuItem.new_with_mnemonic(label)
+        item.set_use_underline(False)
+        if kind:
+            icon_name = GLYPH_ICON_NAMES.get(kind, "image-x-generic")
+            image = make_icon(icon_name, 16, fallback="image-x-generic")
+            if image is not None:
+                item.set_image(image)
+                item.set_always_show_image(True)
+        if callback:
+            item.connect("activate", callback)
+        return item
     item = Gtk.MenuItem()
     row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
     if kind:

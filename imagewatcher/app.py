@@ -287,7 +287,7 @@ class Application:
             activate_time,
         )
 
-    def _design_tools_menu(self):
+    def _design_tools_menu(self, tray=False):
         item = Gtk.MenuItem(label="Herramientas de diseno")
         submenu = Gtk.Menu()
         for label, kind, callback in [
@@ -298,11 +298,13 @@ class Application:
             ("Transportador", "protractor", lambda: self.open_tool("protractor")),
             ("Pizarra", "pen", lambda: self.open_tool("whiteboard")),
         ]:
-            submenu.append(ui.menu_item(label, kind, lambda *_, cb=callback: cb()))
+            submenu.append(
+                ui.menu_item(label, kind, lambda *_, cb=callback: cb(), tray=tray)
+            )
         item.set_submenu(submenu)
         return item
 
-    def _capture_menu(self, include_primary=True):
+    def _capture_menu(self, include_primary=True, tray=False):
         item = Gtk.MenuItem(label="Capturar")
         submenu = Gtk.Menu()
         entries = []
@@ -325,32 +327,34 @@ class Application:
             ]
         )
         for label, kind, callback in entries:
-            submenu.append(ui.menu_item(label, kind, lambda *_, cb=callback: cb()))
+            submenu.append(
+                ui.menu_item(label, kind, lambda *_, cb=callback: cb(), tray=tray)
+            )
         item.set_submenu(submenu)
         return item
 
-    def _tools_category_menu(self):
+    def _tools_category_menu(self, tray=False):
         item = Gtk.MenuItem(label="Herramientas")
         submenu = Gtk.Menu()
         submenu.append(
             ui.menu_item(
-                "Editor de imagenes", "pen", lambda *_: self.open_editor_blank()
+                "Editor de imagenes", "pen", lambda *_: self.open_editor_blank(), tray=tray
             )
         )
         submenu.append(
             ui.menu_item(
-                "Grabador de pantalla", "record", lambda *_: self.open_tool("recorder")
+                "Grabador de pantalla", "record", lambda *_: self.open_tool("recorder"), tray=tray
             )
         )
         submenu.append(Gtk.SeparatorMenuItem())
-        submenu.append(self._design_tools_menu())
+        submenu.append(self._design_tools_menu(tray=tray))
         submenu.append(Gtk.SeparatorMenuItem())
-        submenu.append(self._color_history_menu())
+        submenu.append(self._color_history_menu(tray=tray))
         submenu.append(self._color_format_menu())
         submenu.append(Gtk.SeparatorMenuItem())
         submenu.append(
             ui.menu_item(
-                "Ocultar superposiciones", None, lambda *_: self._hide_overlays()
+                "Ocultar superposiciones", None, lambda *_: self._hide_overlays(), tray=tray
             )
         )
         item.set_submenu(submenu)
@@ -358,32 +362,38 @@ class Application:
 
     def _build_menu(self):
         menu = Gtk.Menu()
-        menu.append(self._favorites_menu())
-        menu.append(self._capture_menu())
-        menu.append(self._tools_category_menu())
+        menu.append(self._favorites_menu(tray=True))
+        menu.append(self._capture_menu(tray=True))
+        menu.append(self._tools_category_menu(tray=True))
         menu.append(Gtk.SeparatorMenuItem())
         menu.append(
             ui.menu_item(
                 "Mostrar barra de captura",
                 None,
                 lambda *_: self._set_bar_visible(True, force=True),
+                tray=True,
             )
         )
         menu.append(
             ui.menu_item(
-                "Ocultar barra de captura", None, lambda *_: self._set_bar_visible(False)
+                "Ocultar barra de captura",
+                None,
+                lambda *_: self._set_bar_visible(False),
+                tray=True,
             )
         )
         menu.append(Gtk.SeparatorMenuItem())
         menu.append(
             ui.menu_item(
-                "Preferencias...", "settings", lambda *_: self.open_preferences()
+                "Preferencias...", "settings", lambda *_: self.open_preferences(), tray=True
             )
         )
-        menu.append(ui.menu_item("Guia de uso", None, lambda *_: self.show_welcome()))
-        menu.append(ui.menu_item("Acerca de", None, lambda *_: self._about()))
+        menu.append(
+            ui.menu_item("Guia de uso", None, lambda *_: self.show_welcome(), tray=True)
+        )
+        menu.append(ui.menu_item("Acerca de", None, lambda *_: self._about(), tray=True))
         menu.append(Gtk.SeparatorMenuItem())
-        menu.append(ui.menu_item("Salir", None, lambda *_: self.quit()))
+        menu.append(ui.menu_item("Salir", None, lambda *_: self.quit(), tray=True))
         menu.show_all()
         return menu
 
@@ -686,7 +696,7 @@ class Application:
         elif tool_id in FAVORITE_TOOL_MAP:
             self.open_tool(tool_id)
 
-    def _favorites_menu(self):
+    def _favorites_menu(self, tray=False):
         item = Gtk.MenuItem(label="Favoritos")
         submenu = Gtk.Menu()
         ids = self.favorite_tool_ids()
@@ -697,7 +707,7 @@ class Application:
         else:
             for tool_id in ids:
                 if tool_id == "color_history":
-                    submenu.append(self._color_history_menu())
+                    submenu.append(self._color_history_menu(tray=tray))
                 elif tool_id == "color_format":
                     submenu.append(self._color_format_menu())
                 else:
@@ -707,6 +717,7 @@ class Application:
                             label,
                             kind,
                             lambda *_, t=tool_id: self.open_favorite(t),
+                            tray=tray,
                         )
                     )
         submenu.append(Gtk.SeparatorMenuItem())
@@ -910,7 +921,7 @@ class Application:
         self.config.save()
         self._refresh_tray_menu()
 
-    def _color_history_menu(self):
+    def _color_history_menu(self, tray=False):
         item = Gtk.MenuItem(label="Historial de colores")
         submenu = Gtk.Menu()
         history = self.config.get("color_history", [])
@@ -920,16 +931,23 @@ class Application:
             submenu.append(empty)
         else:
             for hexv in history:
-                entry = Gtk.MenuItem()
-                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-                row.pack_start(Gtk.Image.new_from_pixbuf(self._swatch_pixbuf(hexv)), False, False, 0)
-                row.pack_start(
-                    Gtk.Label(label=self._format_color_value(hexv), xalign=0),
-                    False,
-                    False,
-                    0,
-                )
-                entry.add(row)
+                value = self._format_color_value(hexv)
+                if tray:
+                    # DBusMenu no serializa hijos personalizados: etiqueta plana.
+                    entry = Gtk.MenuItem(label=f"● {value}")
+                else:
+                    entry = Gtk.MenuItem()
+                    row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                    row.pack_start(
+                        Gtk.Image.new_from_pixbuf(self._swatch_pixbuf(hexv)),
+                        False,
+                        False,
+                        0,
+                    )
+                    row.pack_start(
+                        Gtk.Label(label=value, xalign=0), False, False, 0
+                    )
+                    entry.add(row)
                 entry.connect("activate", lambda *_, h=hexv: self._copy_color_hex(h))
                 submenu.append(entry)
             submenu.append(Gtk.SeparatorMenuItem())
