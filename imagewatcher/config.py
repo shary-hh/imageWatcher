@@ -30,6 +30,7 @@ DEFAULTS = {
     "color_history": [],
     "record_fps": 25,
     "record_audio": False,
+    "record_countdown": 3,
     "theme": "system",
     "show_welcome": True,
 }

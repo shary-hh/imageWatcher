@@ -1240,6 +1240,19 @@ class PreferencesDialog(Gtk.Dialog):
         self.fps_spin = Gtk.SpinButton(adjustment=adj)
         row.pack_start(self.fps_spin, False, False, 0)
         box.pack_start(row, False, False, 0)
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row.pack_start(Gtk.Label(label="Cuenta regresiva (s):"), False, False, 0)
+        adj = Gtk.Adjustment(
+            value=self.config.get("record_countdown", 3), lower=0, upper=30, step_increment=1
+        )
+        self.record_countdown_spin = Gtk.SpinButton(adjustment=adj)
+        self.record_countdown_spin.set_tooltip_text(
+            "Segundos antes de empezar a grabar. 0 desactiva la cuenta."
+        )
+        row.pack_start(self.record_countdown_spin, False, False, 0)
+        box.pack_start(row, False, False, 0)
+
         self.audio_check = Gtk.CheckButton(label="Grabar audio del sistema")
         self.audio_check.set_active(self.config.get("record_audio", False))
         box.pack_start(self.audio_check, False, False, 0)
@@ -1266,6 +1279,7 @@ class PreferencesDialog(Gtk.Dialog):
             self.config.data["hotkeys"][key] = entry.get_text().strip()
         self.config["record_fps"] = int(self.fps_spin.get_value())
         self.config["record_audio"] = self.audio_check.get_active()
+        self.config["record_countdown"] = int(self.record_countdown_spin.get_value())
         self.config["favorite_tools"] = [
             tool_id
             for tool_id, _label, _kind in FAVORITE_TOOLS

@@ -72,6 +72,7 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 - Wayland/wlroots: pantalla completa o region con `wf-recorder` (y `slurp`
   para elegir la region).
 - Wayland/GNOME: grabacion de pantalla completa con la API de GNOME Shell.
+- Cuenta regresiva configurable antes de empezar (0-30 s).
 - FPS ajustable y audio del sistema opcional (segun el backend).
 
 ### Integracion
@@ -103,6 +104,7 @@ Leyenda: ✅ implementado · ◐ parcial · ✗ requiere servicio externo/cuenta
 | Captura | Captura con cursor / retrasada / autoguardado | ✅ |
 | Captura | Multiples monitores | ✅ |
 | Grabacion | Pantalla completa / region + audio del sistema | ✅ |
+| Grabacion | Cuenta regresiva configurable antes de grabar | ✅ |
 | Grabacion | Ventana / microfono | ◐ |
 | Editor | Lapiz, pincel, rotulador, resaltador | ✅ |
 | Editor | Aerografo, caligrafia | ✅ |

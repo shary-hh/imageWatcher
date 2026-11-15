@@ -58,6 +58,8 @@ class RecorderWindow(Gtk.Window):
         self._gnome_bus = None
         self.start_time = None
         self._timer = None
+        self._countdown_timer = None
+        self._countdown_remaining = 0
         self.set_default_size(440, 300)
         subtitle = {
             "x11": "Video con ffmpeg",
@@ -88,14 +90,25 @@ class RecorderWindow(Gtk.Window):
         self.fps_spin = Gtk.SpinButton(adjustment=fps_adj)
         grid.attach(self.fps_spin, 1, 1, 1, 1)
 
-        grid.attach(Gtk.Label(label="Audio del sistema:", xalign=0), 0, 2, 1, 1)
+        grid.attach(Gtk.Label(label="Cuenta regresiva (s):", xalign=0), 0, 2, 1, 1)
+        countdown_adj = Gtk.Adjustment(
+            value=config.get("record_countdown", 3), lower=0, upper=30, step_increment=1
+        )
+        self.countdown_spin = Gtk.SpinButton(adjustment=countdown_adj)
+        self.countdown_spin.set_tooltip_text(
+            "Segundos de espera antes de empezar a grabar. 0 desactiva la cuenta."
+        )
+        self.countdown_spin.connect("value-changed", self._on_countdown_changed)
+        grid.attach(self.countdown_spin, 1, 2, 1, 1)
+
+        grid.attach(Gtk.Label(label="Audio del sistema:", xalign=0), 0, 3, 1, 1)
         self.audio_check = Gtk.CheckButton()
         self.audio_check.set_active(config.get("record_audio", False))
         sink = capture.list_audio_sinks()
         self.audio_check.set_sensitive(
             bool(sink) and self.backend in ("x11", "wf-recorder")
         )
-        grid.attach(self.audio_check, 1, 2, 1, 1)
+        grid.attach(self.audio_check, 1, 3, 1, 1)
 
         self.timer_label = Gtk.Label(label="00:00")
         self.timer_label.set_markup("<span size='xx-large'>00:00</span>")
@@ -312,13 +325,82 @@ class RecorderWindow(Gtk.Window):
         cmd += ["-r", str(fps)] + vcodec + [self.output_path]
         return cmd
 
+    def _can_start(self):
+        return self.backend is not None and (
+            self.backend != "x11" or bool(ffmpeg_path())
+        )
+
+    def _on_countdown_changed(self, spin):
+        self.config["record_countdown"] = int(spin.get_value())
+        try:
+            self.config.save()
+        except Exception:
+            pass
+
+    def _show_countdown(self):
+        remaining = self._countdown_remaining
+        self.timer_label.set_markup(
+            f"<span size='xx-large'>{remaining}</span>"
+        )
+        self.status.set_text(f"La grabacion empieza en {remaining} s...")
+
+    def _begin_countdown(self, seconds):
+        self._countdown_remaining = int(seconds)
+        self.start_btn.set_sensitive(False)
+        self.stop_btn.set_sensitive(True)
+        self._show_countdown()
+        self._countdown_timer = GLib.timeout_add(1000, self._countdown_tick)
+
+    def _countdown_tick(self):
+        if self._countdown_remaining > 0:
+            self._countdown_remaining -= 1
+        if self._countdown_remaining <= 0:
+            self._countdown_timer = None
+            self.timer_label.set_markup(
+                "<span size='xx-large'>00:00</span>"
+            )
+            self._start_recording()
+            return False
+        self._show_countdown()
+        return True
+
+    def _cancel_countdown(self):
+        if self._countdown_timer is not None:
+            try:
+                GLib.source_remove(self._countdown_timer)
+            except Exception:
+                pass
+            self._countdown_timer = None
+        self._countdown_remaining = 0
+        self.timer_label.set_markup("<span size='xx-large'>00:00</span>")
+        self.start_btn.set_sensitive(self._can_start())
+        self.stop_btn.set_sensitive(False)
+
     def _start(self):
+        if self._countdown_timer is not None:
+            return
+        if not self._can_start():
+            self.status.set_text("No se puede iniciar la grabacion")
+            return
+        self._save_countdown()
+        seconds = int(self.countdown_spin.get_value())
+        if seconds > 0:
+            self._begin_countdown(seconds)
+        else:
+            self._start_recording()
+
+    def _save_countdown(self):
+        self._on_countdown_changed(self.countdown_spin)
+
+    def _start_recording(self):
         if self.backend == "gnome":
             self._start_gnome()
             return
         cmd = self._build_command()
         if not cmd:
             self.status.set_text("No se pudo preparar la grabacion")
+            self.start_btn.set_sensitive(self._can_start())
+            self.stop_btn.set_sensitive(False)
             return
         try:
             self.process = subprocess.Popen(
@@ -326,6 +408,8 @@ class RecorderWindow(Gtk.Window):
             )
         except Exception as exc:
             self.status.set_text(f"Error: {exc}")
+            self.start_btn.set_sensitive(self._can_start())
+            self.stop_btn.set_sensitive(False)
             return
         self._stop_signal = self.backend == "wf-recorder"
         self.start_time = time.time()
@@ -364,9 +448,13 @@ class RecorderWindow(Gtk.Window):
             success, filename = reply.unpack()
         except Exception as exc:
             self.status.set_text(f"Error: {exc}")
+            self.start_btn.set_sensitive(self._can_start())
+            self.stop_btn.set_sensitive(False)
             return
         if not success:
             self.status.set_text("GNOME Shell rechazo la grabacion.")
+            self.start_btn.set_sensitive(self._can_start())
+            self.stop_btn.set_sensitive(False)
             return
         self._gnome_bus = bus
         self._gnome_screencast = True
@@ -388,6 +476,10 @@ class RecorderWindow(Gtk.Window):
         return True
 
     def _stop(self):
+        if self._countdown_timer is not None:
+            self._cancel_countdown()
+            self.status.set_text("Grabacion cancelada")
+            return
         if self._timer:
             GLib.source_remove(self._timer)
             self._timer = None
@@ -408,7 +500,7 @@ class RecorderWindow(Gtk.Window):
                 pass
             self._gnome_screencast = False
             self._gnome_bus = None
-            self.start_btn.set_sensitive(self.backend is not None)
+            self.start_btn.set_sensitive(self._can_start())
             self.stop_btn.set_sensitive(False)
             self.status.set_text(f"Guardado: {self.output_path}")
         if self.process:
@@ -425,10 +517,7 @@ class RecorderWindow(Gtk.Window):
                 except Exception:
                     pass
             self.process = None
-            self.start_btn.set_sensitive(
-                self.backend is not None
-                and (self.backend != "x11" or bool(ffmpeg_path()))
-            )
+            self.start_btn.set_sensitive(self._can_start())
             self.stop_btn.set_sensitive(False)
             self.status.set_text(f"Guardado: {self.output_path}")
 
