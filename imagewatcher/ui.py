@@ -26,6 +26,16 @@ BORDER = "#333d4e"
 TEXT = "#e9edf5"
 TEXT_DIM = "#9aa5b8"
 
+# Superficies claras para las barras con iconos negros.
+LIGHT_BG = "#f4f6fa"
+LIGHT_BG_ALT = "#e9edf4"
+LIGHT_HOVER = "#dde3ed"
+LIGHT_BORDER = "#c4ccda"
+LIGHT_TEXT = "#10141b"
+LIGHT_TEXT_DIM = "#4b5566"
+LIGHT_SELECT = "#d3e3ff"
+LIGHT_ACCENT = "#1b5fd9"
+
 CSS = f"""
 window.imagewatcher {{
     background-color: {BG};
@@ -35,87 +45,159 @@ window.imagewatcher label {{ color: {TEXT}; }}
 
 headerbar {{
     background-image: none;
-    background-color: {BG_ALT};
-    color: {TEXT};
-    border-bottom: 1px solid {BORDER};
+    background-color: {LIGHT_BG_ALT};
+    color: {LIGHT_TEXT};
+    border-bottom: 1px solid {LIGHT_BORDER};
     box-shadow: none;
     min-height: 42px;
 }}
-headerbar .title {{ font-weight: 700; font-size: 13px; color: {TEXT}; }}
-headerbar .subtitle {{ color: {TEXT_DIM}; font-size: 11px; }}
+headerbar .title {{ font-weight: 700; font-size: 13px; color: {LIGHT_TEXT}; }}
+headerbar .subtitle {{ color: {LIGHT_TEXT_DIM}; font-size: 11px; }}
 headerbar button {{
     background-image: none;
     background-color: transparent;
     border: none;
     box-shadow: none;
-    color: {TEXT};
+    color: {LIGHT_TEXT};
 }}
-headerbar button:hover {{ background-color: {BG_HOVER}; border-radius: 8px; }}
+headerbar button:hover {{ background-color: {LIGHT_HOVER}; border-radius: 8px; }}
+headerbar button:checked {{ background-color: {LIGHT_SELECT}; color: {LIGHT_TEXT}; }}
 
 .imagewatcher-bar {{
-    background-image: linear-gradient(180deg, #2c3646, #212936);
-    border: 1px solid {BORDER};
+    background-image: linear-gradient(180deg, #ffffff, #eef2f8);
+    border: 1px solid {LIGHT_BORDER};
     border-radius: 18px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
     padding: 6px;
+    color: {LIGHT_TEXT};
 }}
 .imagewatcher-bar button {{
     background-image: none;
     background-color: transparent;
     border: 1px solid transparent;
     box-shadow: none;
-    color: {TEXT};
+    color: {LIGHT_TEXT};
     padding: 4px 8px;
 }}
 .imagewatcher-bar button:hover {{
-    background-color: {BG_HOVER};
-    border: 1px solid #48566e;
+    background-color: {LIGHT_HOVER};
+    border: 1px solid {LIGHT_BORDER};
     border-radius: 12px;
 }}
 .imagewatcher-bar button:active,
 .imagewatcher-bar button:checked {{
     background-image: none;
-    background-color: {ACCENT};
+    background-color: {LIGHT_SELECT};
     border: 1px solid {ACCENT};
     border-radius: 12px;
-    color: #ffffff;
+    color: {LIGHT_TEXT};
 }}
-.imagewatcher-bar separator {{ background-color: #3b475d; min-width: 1px; margin: 8px 6px; }}
-.tile-label {{ font-size: 11px; color: #cbd4e3; }}
-.imagewatcher-bar button:active .tile-label,
-.imagewatcher-bar button:checked .tile-label {{ color: #ffffff; }}
-.brand {{ font-weight: 800; letter-spacing: 1px; color: #6db2ff; font-size: 14px; }}
-.brand-sub {{ color: {TEXT_DIM}; font-size: 10px; }}
+.imagewatcher-bar separator {{ background-color: {LIGHT_BORDER}; min-width: 1px; margin: 8px 6px; }}
+.tile-label {{ font-size: 11px; color: {LIGHT_TEXT_DIM}; }}
+window.imagewatcher .imagewatcher-bar button:active .tile-label,
+window.imagewatcher .imagewatcher-bar button:checked .tile-label {{ color: {LIGHT_TEXT}; }}
+.brand {{ font-weight: 800; letter-spacing: 1px; color: {LIGHT_ACCENT}; font-size: 14px; }}
+.brand-sub {{ color: {LIGHT_TEXT_DIM}; font-size: 10px; }}
 
 .toolstrip {{
-    background-color: {BG_ALT};
-    border-bottom: 1px solid {BORDER};
+    background-color: {LIGHT_BG};
+    border-bottom: 1px solid {LIGHT_BORDER};
     padding: 5px;
+    color: {LIGHT_TEXT};
 }}
-.toolstrip button {{
+.toolstrip button,
+.toolstrip radiobutton {{
     background-image: none;
     background-color: transparent;
     border: 1px solid transparent;
     border-radius: 9px;
     padding: 6px;
-    color: {TEXT};
+    color: {LIGHT_TEXT};
     min-width: 30px;
     min-height: 30px;
 }}
-.toolstrip button:hover {{ background-color: {BG_HOVER}; border-color: #48566e; }}
-.toolstrip button:checked {{
-    background-color: {ACCENT};
+.toolstrip button:hover,
+.toolstrip radiobutton:hover {{ background-color: {LIGHT_HOVER}; border-color: {LIGHT_BORDER}; }}
+.toolstrip button:checked,
+.toolstrip radiobutton:checked {{
+    background-color: {LIGHT_SELECT};
     border-color: {ACCENT};
-    color: #ffffff;
+    color: {LIGHT_TEXT};
 }}
-.toolstrip separator {{ background-color: {BORDER}; margin: 4px 6px; }}
+.toolstrip radiobutton radio,
+.toolstrip radiobutton check {{
+    -gtk-icon-source: none;
+    background-image: none;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+}}
+.toolstrip separator {{ background-color: {LIGHT_BORDER}; margin: 4px 6px; }}
 
 .optionsbar {{
-    background-color: {BG_ALT};
-    border-bottom: 1px solid {BORDER};
+    background-color: {LIGHT_BG_ALT};
+    border-bottom: 1px solid {LIGHT_BORDER};
     padding: 6px 10px;
+    color: {LIGHT_TEXT};
 }}
-.optionsbar label {{ color: {TEXT_DIM}; }}
+.optionsbar label {{ color: {LIGHT_TEXT_DIM}; }}
+
+/* Las etiquetas dentro de barras claras necesitan mas especificidad que
+   `window.imagewatcher label` para que el texto quede oscuro. */
+window.imagewatcher headerbar label,
+window.imagewatcher .imagewatcher-bar label,
+window.imagewatcher .toolstrip label,
+window.imagewatcher .pill label {{ color: {LIGHT_TEXT}; }}
+window.imagewatcher headerbar .title {{ color: {LIGHT_TEXT}; }}
+window.imagewatcher headerbar .subtitle,
+window.imagewatcher .imagewatcher-bar .tile-label,
+window.imagewatcher .imagewatcher-bar .brand-sub {{ color: {LIGHT_TEXT_DIM}; }}
+window.imagewatcher .imagewatcher-bar .brand {{ color: {LIGHT_ACCENT}; }}
+window.imagewatcher .optionsbar label {{ color: {LIGHT_TEXT_DIM}; }}
+
+window.imagewatcher .optionsbar spinbutton,
+window.imagewatcher .optionsbar entry,
+window.imagewatcher .pill spinbutton,
+window.imagewatcher .pill entry {{
+    background-image: none;
+    background-color: #ffffff;
+    color: {LIGHT_TEXT};
+    border: 1px solid {LIGHT_BORDER};
+}}
+window.imagewatcher .optionsbar spinbutton button,
+window.imagewatcher .pill spinbutton button {{
+    background-image: none;
+    background-color: {LIGHT_BG};
+    color: {LIGHT_TEXT};
+    border: 1px solid {LIGHT_BORDER};
+}}
+window.imagewatcher .optionsbar checkbutton,
+window.imagewatcher .pill checkbutton {{ color: {LIGHT_TEXT}; }}
+window.imagewatcher .optionsbar checkbutton check,
+window.imagewatcher .pill checkbutton check {{
+    -gtk-icon-source: none;
+    background-image: none;
+    background-color: #ffffff;
+    border: 1px solid {LIGHT_BORDER};
+    box-shadow: none;
+    min-width: 14px;
+    min-height: 14px;
+}}
+window.imagewatcher .optionsbar checkbutton check:checked,
+window.imagewatcher .pill checkbutton check:checked {{
+    -gtk-icon-source: -gtk-icontheme("object-select-symbolic");
+    color: {LIGHT_TEXT};
+}}
+window.imagewatcher .optionsbar button.color,
+window.imagewatcher .pill button.color {{
+    background-image: none;
+    background-color: #ffffff;
+    border: 1px solid {LIGHT_BORDER};
+}}
 
 .card {{
     background-color: {BG_ALT};
@@ -132,23 +214,24 @@ headerbar button:hover {{ background-color: {BG_HOVER}; border-radius: 8px; }}
 .accent {{ color: #6db2ff; }}
 
 .pill {{
-    background-color: {BG_ALT};
-    border: 1px solid {BORDER};
+    background-color: {LIGHT_BG};
+    border: 1px solid {LIGHT_BORDER};
     border-radius: 20px;
-    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
     padding: 6px 8px;
+    color: {LIGHT_TEXT};
 }}
 .pill button {{
     background-image: none;
     background-color: transparent;
     border: none;
     box-shadow: none;
-    color: {TEXT};
+    color: {LIGHT_TEXT};
     padding: 6px;
 }}
-.pill button:hover {{ background-color: {BG_HOVER}; border-radius: 12px; }}
-.pill button:checked {{ background-color: {ACCENT}; border-radius: 12px; color: #ffffff; }}
-.pill separator {{ background-color: {BORDER}; margin: 6px; }}
+.pill button:hover {{ background-color: {LIGHT_HOVER}; border-radius: 12px; }}
+.pill button:checked {{ background-color: {LIGHT_SELECT}; border-radius: 12px; color: {LIGHT_TEXT}; }}
+.pill separator {{ background-color: {LIGHT_BORDER}; margin: 6px; }}
 
 menu, .menu {{
     background-image: none;
@@ -184,6 +267,7 @@ menu separator {{
 
 .imagewatcher-bar button:focus,
 .toolstrip button:focus,
+.toolstrip radiobutton:focus,
 .pill button:focus,
 headerbar button:focus {{
     box-shadow: none;
@@ -246,7 +330,15 @@ def has_icon(name):
 
 
 def make_icon(name, size=18, fallback="image-x-generic"):
-    chosen = name if has_icon(name) else (fallback if has_icon(fallback) else None)
+    candidates = []
+    if name:
+        candidates.append(name if name.endswith("-symbolic") else name + "-symbolic")
+        candidates.append(name)
+    if fallback:
+        if not fallback.endswith("-symbolic"):
+            candidates.append(fallback + "-symbolic")
+        candidates.append(fallback)
+    chosen = next((candidate for candidate in candidates if has_icon(candidate)), None)
     if chosen is None:
         return None
     image = Gtk.Image.new_from_icon_name(chosen, Gtk.IconSize.BUTTON)
@@ -319,7 +411,9 @@ def toggle_icon(icon_name, tooltip=None, group=None, icon_size=18):
 
 # --------------------------------------------------------------------- glyphs
 # Iconos monocromos dibujados con Cairo: consistentes con cualquier tema.
-GLYPH_COLOR = (0.87, 0.90, 0.96)
+# Las barras claras usan negro; los menus oscuros piden el color claro.
+GLYPH_COLOR = (0.0, 0.0, 0.0)
+GLYPH_COLOR_LIGHT = (0.87, 0.90, 0.96)
 
 
 def glyph_pixbuf(kind, size=22, color=GLYPH_COLOR, line=1.9):
@@ -633,7 +727,7 @@ def menu_item(label, kind=None, callback=None):
     item = Gtk.MenuItem()
     row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
     if kind:
-        image = glyph_image(kind, 16)
+        image = glyph_image(kind, 16, GLYPH_COLOR_LIGHT)
         if image is not None:
             row.pack_start(image, False, False, 0)
     row.pack_start(Gtk.Label(label=label, xalign=0), False, False, 0)
