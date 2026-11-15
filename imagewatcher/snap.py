@@ -64,11 +64,12 @@ def build_snap_lines(image, include_windows=True, max_lines=SNAP_EDGE_LINES):
     ys.update((0, max(0, height - 1)))
     if include_windows:
         try:
-            from .capture import list_windows
+            from .capture import list_windows, virtual_screen_size
 
-            for window in list_windows():
-                xs.update((window.x, window.x + window.width - 1))
-                ys.update((window.y, window.y + window.height - 1))
+            if image.size == tuple(virtual_screen_size()):
+                for window in list_windows():
+                    xs.update((window.x, window.x + window.width - 1))
+                    ys.update((window.y, window.y + window.height - 1))
         except Exception:
             pass
     try:

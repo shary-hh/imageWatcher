@@ -1,9 +1,22 @@
-"""Atajos de teclado globales usando XGrabKey (X11)."""
+"""Atajos de teclado globales: XGrabKey en X11 y portal en Wayland.
+
+Wayland no permite capturar teclas globales directamente. Cuando el escritorio
+ofrece `org.freedesktop.portal.GlobalShortcuts`, se registran los atajos ahi;
+si no existe (por ejemplo en GNOME sin ese portal), la aplicacion sigue
+funcionando sin atajos globales y se informa del motivo.
+"""
 import logging
+import os
 import threading
 import time
 
-from gi.repository import GLib
+import gi
+
+gi.require_version("Gio", "2.0")
+
+from gi.repository import Gio, GLib  # noqa: E402
+
+from . import session  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +32,39 @@ MODIFIERS = {
     "mod4": 0x0040,
 }
 
+PORTAL_MODIFIERS = {
+    "ctrl": "CTRL",
+    "control": "CTRL",
+    "shift": "SHIFT",
+    "alt": "ALT",
+    "mod1": "ALT",
+    "super": "LOGO",
+    "win": "LOGO",
+    "meta": "LOGO",
+    "mod4": "LOGO",
+}
+
+KEY_ALIASES = {
+    "escape": "Escape",
+    "esc": "Escape",
+    "return": "Return",
+    "enter": "Return",
+    "space": "space",
+    "tab": "Tab",
+    "delete": "Delete",
+    "backspace": "BackSpace",
+    "up": "Up",
+    "down": "Down",
+    "left": "Left",
+    "right": "Right",
+    "home": "Home",
+    "end": "End",
+    "pageup": "Page_Up",
+    "pagedown": "Page_Down",
+    "page_up": "Page_Up",
+    "page_down": "Page_Down",
+}
+
 IGNORED_MASK = 0x0002 | 0x0010  # LockMask | Mod2Mask
 
 
@@ -32,6 +78,10 @@ class HotkeyManager:
         self._bindings = {}
         self._callbacks = {}
         self.failures = []
+        self._bus = None
+        self._portal_session = None
+        self._portal_subscriptions = []
+        self._portal_actions = {}
 
     def _parse(self, spec):
         tokens = [token.strip().lower() for token in spec.split("+") if token.strip()]
@@ -44,8 +94,239 @@ class HotkeyManager:
                 mods |= MODIFIERS[token]
         return mods, key_name
 
+    def _portal_trigger(self, spec):
+        tokens = [token.strip().lower() for token in spec.split("+") if token.strip()]
+        if not tokens:
+            return None
+        mods = []
+        for token in tokens[:-1]:
+            modifier = PORTAL_MODIFIERS.get(token)
+            if modifier and modifier not in mods:
+                mods.append(modifier)
+        key = KEY_ALIASES.get(tokens[-1])
+        if key is None:
+            key = tokens[-1].upper() if len(tokens[-1]) == 1 else tokens[-1].capitalize()
+        return "+".join(mods + [key])
+
+    def _portal_request(self, interface, method, make_params, timeout=60):
+        """Llama a un metodo del portal que devuelve un request handle."""
+        if self._bus is None:
+            return None
+        token = f"imagewatcher_{os.getpid()}_{time.time_ns()}"
+        request_path = f"{session.PORTAL_PATH}/request/"
+        unique = (self._bus.get_unique_name() or "").lstrip(":") or "0"
+        request_path += unique.replace(".", "_") + "/" + token
+        state = {"done": False, "result": None}
+        loop = GLib.MainLoop()
+
+        def on_response(_conn, _sender, _path, _iface, _signal, params, _data=None):
+            if state["done"]:
+                return
+            state["done"] = True
+            try:
+                state["result"] = params.unpack()
+            except Exception:
+                state["result"] = (1, {})
+            if loop.is_running():
+                loop.quit()
+
+        subscription = self._bus.signal_subscribe(
+            session.PORTAL_BUS,
+            session.PORTAL_REQUEST,
+            "Response",
+            request_path,
+            None,
+            Gio.DBusSignalFlags.NONE,
+            on_response,
+        )
+        try:
+            params = make_params(token)
+            reply = self._bus.call_sync(
+                session.PORTAL_BUS,
+                session.PORTAL_PATH,
+                interface,
+                method,
+                params,
+                GLib.VariantType.new("(o)"),
+                Gio.DBusCallFlags.NONE,
+                timeout * 1000,
+                None,
+            )
+        except Exception:
+            reply = None
+        if reply is None:
+            self._bus.signal_unsubscribe(subscription)
+            return None
+        if not state["done"]:
+            def _timeout():
+                if not state["done"]:
+                    state["done"] = True
+                    if loop.is_running():
+                        loop.quit()
+                return False
+
+            timeout_id = GLib.timeout_add_seconds(timeout, _timeout)
+            try:
+                loop.run()
+            finally:
+                try:
+                    GLib.source_remove(timeout_id)
+                except Exception:
+                    pass
+        self._bus.signal_unsubscribe(subscription)
+        result = state.get("result")
+        if not result:
+            return None
+        try:
+            response, values = result
+        except Exception:
+            return None
+        if response != 0:
+            return False
+        return values if isinstance(values, dict) else {}
+
+    def _start_wayland(self, hotkeys):
+        if session.portal_version(session.PORTAL_GLOBAL_SHORTCUTS) <= 0:
+            self.failures.append(
+                "Wayland: el portal GlobalShortcuts no esta disponible. "
+                "Configura los atajos desde el escritorio."
+            )
+            return
+        try:
+            self._bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        except Exception as exc:
+            self.failures.append(f"No se pudo abrir D-Bus: {exc}")
+            return
+        result = self._portal_request(
+            session.PORTAL_GLOBAL_SHORTCUTS,
+            "CreateSession",
+            lambda token: GLib.Variant(
+                "(a{sv})",
+                (
+                    {
+                        "handle_token": GLib.Variant("s", token),
+                        "session_handle_token": GLib.Variant(
+                            "s", f"imagewatcher_{os.getpid()}"
+                        ),
+                    },
+                ),
+            ),
+            timeout=30,
+        )
+        if result is None or result is False:
+            self.failures.append(
+                "Wayland: no se pudo crear una sesion de atajos globales."
+            )
+            self._close_portal()
+            return
+        session_handle = result.get("session_handle") if isinstance(result, dict) else None
+        if not session_handle:
+            self.failures.append("Wayland: el portal no devolvio la sesion de atajos.")
+            self._close_portal()
+            return
+        session_handle = str(session_handle)
+
+        shortcuts = []
+        for action, spec in hotkeys.items():
+            trigger = self._portal_trigger(spec)
+            if not trigger:
+                continue
+            shortcuts.append(
+                (
+                    action,
+                    {
+                        "description": GLib.Variant("s", action),
+                        "preferred_trigger": GLib.Variant("s", trigger),
+                    },
+                )
+            )
+        if not shortcuts:
+            self._portal_session = session_handle
+            self._close_portal()
+            return
+
+        result = self._portal_request(
+            session.PORTAL_GLOBAL_SHORTCUTS,
+            "BindShortcuts",
+            lambda token: GLib.Variant(
+                "(oa(sa{sv})sa{sv})",
+                (
+                    session_handle,
+                    shortcuts,
+                    "",
+                    {"handle_token": GLib.Variant("s", token)},
+                ),
+            ),
+            timeout=120,
+        )
+        if result is None or result is False:
+            self.failures.append(
+                "Wayland: el escritorio rechazo o no pudo registrar los atajos."
+            )
+            self._portal_session = session_handle
+            self._close_portal()
+            return
+
+        self._portal_session = session_handle
+        self._portal_actions = {action: action for action, _spec in hotkeys.items()}
+
+        def on_activated(_conn, _sender, _path, _iface, _signal, params, _data=None):
+            try:
+                values = params.unpack()
+                _session_handle, shortcut_id = values[0], values[1]
+            except Exception:
+                return
+            action = self._portal_actions.get(shortcut_id)
+            callback = self._callbacks.get(action) if action else None
+            if callback:
+                GLib.idle_add(callback)
+
+        self._portal_subscriptions.append(
+            self._bus.signal_subscribe(
+                session.PORTAL_BUS,
+                session.PORTAL_GLOBAL_SHORTCUTS,
+                "Activated",
+                None,
+                None,
+                Gio.DBusSignalFlags.NONE,
+                on_activated,
+            )
+        )
+        self._running = True
+
+    def _close_portal(self):
+        for subscription in self._portal_subscriptions:
+            try:
+                self._bus.signal_unsubscribe(subscription)
+            except Exception:
+                pass
+        self._portal_subscriptions = []
+        if self._portal_session and self._bus is not None:
+            try:
+                self._bus.call_sync(
+                    session.PORTAL_BUS,
+                    self._portal_session,
+                    "org.freedesktop.portal.Session",
+                    "Close",
+                    None,
+                    None,
+                    Gio.DBusCallFlags.NONE,
+                    3000,
+                    None,
+                )
+            except Exception:
+                pass
+        self._portal_session = None
+        self._bus = None
+        self._running = False
+        self._portal_actions = {}
+
     def start(self, hotkeys):
         self.stop()
+        self.failures = []
+        if session.is_wayland():
+            self._start_wayland(hotkeys)
+            return
         from Xlib import X, XK, display as xdisplay, error as xerror
 
         try:
@@ -137,6 +418,8 @@ class HotkeyManager:
         self._callbacks = callbacks
 
     def stop(self):
+        if self._bus is not None or self._portal_session is not None:
+            self._close_portal()
         self._running = False
         if self._thread is not None:
             self._thread.join(timeout=1.0)

@@ -1,10 +1,11 @@
 """imageWatcher - suite de captura y edicion de pantalla para Linux.
 
 Clon de funcionalidad inspirado en PicPick (picpick.app) adaptado a
-Linux Mint / Cinnamon sobre X11 usando GTK3, Pillow y Xlib.
+Linux Mint / Cinnamon. Compatible con sesiones X11 y Wayland usando GTK3,
+Pillow, Xlib y, en Wayland, xdg-desktop-portal.
 """
 
-__version__ = "1.23.24"
+__version__ = "1.24.0"
 __app_name__ = "imageWatcher"
 __app_id__ = "imagewatcher"
 __description__ = "Suite de captura, edicion y grabacion de pantalla para Linux"

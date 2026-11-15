@@ -1,8 +1,11 @@
-"""Backend de captura de pantalla para X11 (Cinnamon / Linux Mint).
+"""Backend de captura de pantalla con soporte X11 y Wayland.
 
-Usa Gdk para capturar el framebuffer y Xlib para resolver la ventana activa,
-la lista de ventanas y (opcionalmente) el cursor del raton.
+En X11 usa Gdk/Xlib (rapido y con informacion de ventanas). En Wayland usa el
+portal de escritorio (xdg-desktop-portal) o herramientas nativas como grim,
+gnome-screenshot o spectacle, porque el servidor no expone el framebuffer ni
+las ventanas de otros clientes.
 """
+import json
 import subprocess
 import time
 from dataclasses import dataclass
@@ -10,11 +13,13 @@ from dataclasses import dataclass
 import gi
 
 gi.require_version("Gdk", "3.0")
+gi.require_version("Gio", "2.0")
 
-from gi.repository import Gdk
+from gi.repository import Gdk, Gio, GLib  # noqa: E402
 from PIL import Image, ImageChops, ImageStat
 
-from .gtk_util import pixbuf_to_pil
+from . import session
+from .gtk_util import get_pointer_position, pixbuf_to_pil
 
 
 @dataclass
@@ -23,20 +28,31 @@ class Geometry:
     y: int
     width: int
     height: int
+    title: str = ""
 
     def as_tuple(self):
         return (self.x, self.y, self.width, self.height)
 
 
-def virtual_screen_size():
-    root = Gdk.get_default_root_window()
-    return root.get_width(), root.get_height()
+class CaptureCancelled(Exception):
+    """El usuario cancelo el selector nativo del portal."""
+
+
+_wayland_cache = {"time": 0.0, "image": None}
+WAYLAND_CACHE_TTL = 0.12
+
+
+def is_wayland():
+    """True si la sesion grafica actual es Wayland."""
+    return session.is_wayland()
 
 
 def monitor_geometries():
-    """Devuelve la lista de geometrias de monitores (coordenadas globales)."""
+    """Devuelve la lista de geometrias de monitores (coordenadas logicas)."""
     display = Gdk.Display.get_default()
     result = []
+    if display is None:
+        return result
     for index in range(display.get_n_monitors()):
         monitor = display.get_monitor(index)
         geom = monitor.get_geometry()
@@ -44,20 +60,191 @@ def monitor_geometries():
     return result
 
 
-def capture_screen():
+def _monitor_bounds():
+    monitors = monitor_geometries()
+    if not monitors:
+        return 0, 0, 0, 0
+    left = min(monitor.x for monitor in monitors)
+    top = min(monitor.y for monitor in monitors)
+    right = max(monitor.x + monitor.width for monitor in monitors)
+    bottom = max(monitor.y + monitor.height for monitor in monitors)
+    return left, top, right - left, bottom - top
+
+
+def virtual_screen_size():
+    """Tamano logico del escritorio virtual (todos los monitores)."""
+    if is_wayland():
+        _left, _top, width, height = _monitor_bounds()
+        if width > 0 and height > 0:
+            return width, height
+    root = Gdk.get_default_root_window()
+    if root is None:
+        width, height = _monitor_bounds()[2:]
+        return max(1, width), max(1, height)
+    return root.get_width(), root.get_height()
+
+
+def _wayland_capture(include_cursor=False, interactive=False):
+    """Obtiene una captura completa en Wayland usando portal o herramientas."""
+    path = None
+    # GNOME Shell permite incluir el cursor sin pasar por el dialogo del portal.
+    if include_cursor and session.is_gnome():
+        path = session.gnome_shell_screenshot(include_cursor=True)
+    if path is None and include_cursor and not interactive:
+        path = session.tool_screenshot(include_cursor=True, interactive=False)
+    if path is None:
+        path = session.portal_screenshot(
+            interactive=interactive, timeout=120 if interactive else 60
+        )
+    if path is False:
+        if interactive:
+            raise CaptureCancelled()
+        path = None
+    if not path:
+        path = session.tool_screenshot(
+            include_cursor=include_cursor,
+            interactive=interactive,
+            timeout=120 if interactive else 60,
+        )
+    if not path:
+        if interactive:
+            raise CaptureCancelled()
+        raise RuntimeError(
+            "No se pudo capturar la pantalla en Wayland. Instala xdg-desktop-portal "
+            "(y xdg-desktop-portal-gnome/kde/wlr) o grim."
+        )
+    try:
+        with Image.open(path) as image:
+            return image.convert("RGBA")
+    finally:
+        session.cleanup_temp(path)
+
+
+def capture_interactive_region():
+    """Captura una region mediante el selector nativo del portal.
+
+    Devuelve una imagen RGBA recortada. Lanza ``CaptureCancelled`` si el
+    usuario cancela.
+    """
+    if not is_wayland():
+        return None
+    return _wayland_capture(interactive=True)
+
+
+def region_monitor_index():
+    """Indice del monitor bajo el puntero (o el principal) para la vista previa."""
+    display = Gdk.Display.get_default()
+    if display is None:
+        return 0
+    count = display.get_n_monitors()
+    if count <= 0:
+        return 0
+    try:
+        x, y = get_pointer_position()
+    except Exception:
+        x = y = None
+    if x is not None:
+        for index in range(count):
+            geom = display.get_monitor(index).get_geometry()
+            if geom.x <= x < geom.x + geom.width and geom.y <= y < geom.y + geom.height:
+                return index
+    primary = display.get_primary_monitor()
+    for index in range(count):
+        if display.get_monitor(index) == primary:
+            return index
+    return 0
+
+
+def region_preview_size():
+    """Tamano logico del monitor activo para la vista previa del selector.
+
+    En Wayland no se puede posicionar una ventana sobre todo el escritorio. El
+    selector muestra una vista comprimida del escritorio completo en el monitor
+    bajo el puntero (o el principal); en X11 se mantiene el tamano real.
+    """
+    if not is_wayland():
+        return None
+    display = Gdk.Display.get_default()
+    if display is None:
+        return None
+    index = region_monitor_index()
+    monitor = display.get_monitor(index)
+    if monitor is None:
+        return None
+    geom = monitor.get_geometry()
+    return (max(1, geom.width), max(1, geom.height))
+
+
+def _logical_to_image(box, image):
+    """Convierte una geometria logica de Gdk a pixeles de la captura."""
+    left, top, width, height = _monitor_bounds()
+    logical_w = max(1, width)
+    logical_h = max(1, height)
+    sx = image.width / logical_w
+    sy = image.height / logical_h
+    x, y, w, h = box
+    return (
+        int(round((x - left) * sx)),
+        int(round((y - top) * sy)),
+        max(1, int(round(w * sx))),
+        max(1, int(round(h * sy))),
+    )
+
+
+def _crop_logical_box(image, box):
+    x, y, width, height = _logical_to_image(box, image)
+    left = max(0, min(x, image.width - 1))
+    top = max(0, min(y, image.height - 1))
+    right = max(left + 1, min(x + width, image.width))
+    bottom = max(top + 1, min(y + height, image.height))
+    return image.crop((left, top, right, bottom))
+
+
+def image_to_logical_box(box, image):
+    """Inverso de ``_logical_to_image``: pixeles de captura a geometria Gdk."""
+    left, top, width, height = _monitor_bounds()
+    sx = image.width / max(1, width)
+    sy = image.height / max(1, height)
+    x, y, w, h = box
+    return (
+        int(round(left + x / sx)),
+        int(round(top + y / sy)),
+        max(1, int(round(w / sx))),
+        max(1, int(round(h / sy))),
+    )
+
+
+def capture_screen(include_cursor=False):
     """Captura el escritorio completo (todos los monitores) como PIL RGBA."""
+    if is_wayland():
+        return _wayland_capture(include_cursor=include_cursor)
     root = Gdk.get_default_root_window()
     width, height = root.get_width(), root.get_height()
     pixbuf = Gdk.pixbuf_get_from_window(root, 0, 0, width, height)
-    return pixbuf_to_pil(pixbuf)
+    image = pixbuf_to_pil(pixbuf)
+    if include_cursor:
+        image = _composite_cursor(image, Geometry(0, 0, width, height))
+    return image
+
+
+def _wayland_cached_screen(ttl=WAYLAND_CACHE_TTL):
+    """Captura compartida para lupas/reglas que consultan muchas veces por segundo."""
+    now = time.monotonic()
+    image = _wayland_cache["image"]
+    if image is not None and now - _wayland_cache["time"] < ttl:
+        return image
+    image = capture_screen()
+    _wayland_cache["image"] = image
+    _wayland_cache["time"] = now
+    return image
 
 
 def capture_region(x, y, width, height, base=None):
     """Captura una region concreta.
 
     Si ``base`` es una imagen, recorta de ella. Si es ``None``, toma la
-    subregion directamente de la pantalla (rapido: sin capturar todo el
-    escritorio ni codificar en PNG).
+    subregion directamente de la pantalla en X11 o recorta de una captura
+    completa en Wayland (donde no existe captura de subregiones).
     """
     if width <= 0 or height <= 0:
         return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
@@ -70,6 +257,11 @@ def capture_region(x, y, width, height, base=None):
         if right <= left or bottom <= top:
             return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
         return base.crop((left, top, right, bottom))
+
+    if is_wayland():
+        image = _wayland_cached_screen()
+        x, y, width, height = _logical_to_image((x, y, width, height), image)
+        return capture_region(x, y, width, height, base=image)
 
     root = Gdk.get_default_root_window()
     screen_w, screen_h = root.get_width(), root.get_height()
@@ -87,7 +279,10 @@ def capture_window(include_cursor=False):
     """Captura la ventana activa (con decoraciones). None si no se puede resolver."""
     geom = active_window_geometry()
     if geom is None:
-        return capture_screen()
+        return capture_screen(include_cursor=include_cursor)
+    if is_wayland():
+        image = capture_screen(include_cursor=include_cursor)
+        return _crop_logical_box(image, geom.as_tuple())
     image = capture_region(*geom.as_tuple())
     if include_cursor:
         image = _composite_cursor(image, geom)
@@ -99,6 +294,9 @@ def capture_monitor(index):
     if not monitors:
         return capture_screen()
     index = index % len(monitors)
+    if is_wayland():
+        image = capture_screen()
+        return _crop_logical_box(image, monitors[index].as_tuple())
     return capture_region(*monitors[index].as_tuple())
 
 
@@ -323,6 +521,38 @@ def stitch_vertical(frames):
 SCROLL_DIFF = 0.4
 
 
+def _wayland_scroll_active_window(times=1, geom=None):
+    """Intenta desplazar la ventana activa con ydotool/wlrctl en Wayland."""
+    if geom is None:
+        geom = active_window_geometry()
+    if geom is None or geom.width <= 0 or geom.height <= 0:
+        return False
+    target_x = geom.x + geom.width // 2
+    target_y = geom.y + geom.height // 2
+
+    if session.which("ydotool"):
+        moved = session.run_command(
+            ["ydotool", "mousemove", "--absolute", "-x", str(target_x), "-y", str(target_y)],
+            timeout=5,
+        )
+        if moved is not None and moved.returncode == 0:
+            for _ in range(times):
+                session.run_command(
+                    ["ydotool", "mousemove", "--wheel", "-y", "120"], timeout=5
+                )
+            return True
+
+    if session.which("wlrctl"):
+        result = session.run_command(
+            ["wlrctl", "pointer", "move", str(target_x), str(target_y)], timeout=5
+        )
+        if result is not None and result.returncode == 0:
+            for _ in range(times):
+                session.run_command(["wlrctl", "pointer", "scroll", "0", "120"], timeout=5)
+            return True
+    return False
+
+
 def _scroll_active_window(times=1, geom=None):
     """Envia rueda de scroll hacia abajo sobre el centro de la ventana.
 
@@ -331,7 +561,12 @@ def _scroll_active_window(times=1, geom=None):
     cualquier otra ventana) el destino no se desplaza y la captura se queda
     con la parte visible. Se mueve el puntero al centro de la ventana y se
     restaura al terminar.
+
+    En Wayland se usa ydotool o wlrctl si estan instalados; sin ellos el
+    desplazamiento no es posible porque no hay inyeccion global estandar.
     """
+    if is_wayland():
+        return _wayland_scroll_active_window(times, geom)
     try:
         from Xlib import X
         from Xlib.ext import xtest
@@ -463,8 +698,7 @@ def _root_coords(window, root):
     return coords.x, coords.y
 
 
-def active_window_geometry():
-    """Geometria (x, y, w, h) de la ventana activa incluyendo marco."""
+def _x11_active_window_geometry():
     try:
         from Xlib import X
 
@@ -493,8 +727,189 @@ def active_window_geometry():
         return None
 
 
+def _geometry_from_rect(rect, title=""):
+    try:
+        x, y, width, height = (int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3]))
+    except Exception:
+        return None
+    if width <= 0 or height <= 0:
+        return None
+    geometry = Geometry(x, y, width, height)
+    geometry.title = title
+    return geometry
+
+
+def _sway_tree():
+    return session.json_command(["swaymsg", "-t", "get_tree", "-r"], timeout=5)
+
+
+def _sway_windows(tree, focused_only=False):
+    result = []
+
+    def walk(node):
+        if not isinstance(node, dict):
+            return
+        if node.get("type") in ("con", "floating_con") and node.get("pid"):
+            if not focused_only or node.get("focused"):
+                rect = node.get("rect") or {}
+                geometry = _geometry_from_rect(
+                    (
+                        rect.get("x", 0),
+                        rect.get("y", 0),
+                        rect.get("width", 0),
+                        rect.get("height", 0),
+                    ),
+                    node.get("name") or node.get("app_id") or "",
+                )
+                if geometry is not None:
+                    result.append(geometry)
+        for key in ("nodes", "floating_nodes"):
+            for child in node.get(key, []) or []:
+                walk(child)
+
+    walk(tree)
+    return result
+
+
+def _hyprland_windows(focused_only=False):
+    data = session.json_command(["hyprctl", "clients", "-j"], timeout=5)
+    if not isinstance(data, list):
+        return []
+    result = []
+    for item in data:
+        if item.get("hidden") or item.get("mapped") is False:
+            continue
+        if focused_only and not item.get("focused"):
+            continue
+        at = item.get("at") or [0, 0]
+        size = item.get("size") or [0, 0]
+        geometry = _geometry_from_rect(
+            (at[0], at[1], size[0], size[1]),
+            item.get("title") or item.get("class") or "",
+        )
+        if geometry is not None:
+            result.append(geometry)
+    return result
+
+
+def _gnome_windows(focused_only=False):
+    """Intenta leer ventanas de GNOME Shell. Eval suele estar deshabilitado."""
+    script = (
+        "JSON.stringify(global.get_window_actors().map(a=>a.meta_window)"
+        ".filter(w=>!w.is_skip_taskbar()).map(w=>{"
+        "let r=w.get_frame_rect();"
+        "return {x:r.x,y:r.y,width:r.width,height:r.height,"
+        "title:w.get_title(),focused:w.has_focus()};}))"
+    )
+    bus = None
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        reply = bus.call_sync(
+            "org.gnome.Shell",
+            "/org/gnome/Shell",
+            "org.gnome.Shell",
+            "Eval",
+            GLib.Variant("(s)", (script,)),
+            GLib.VariantType.new("(bs)"),
+            Gio.DBusCallFlags.NONE,
+            5000,
+            None,
+        )
+        success, payload = reply.unpack()
+        if not success:
+            return []
+        data = json.loads(payload)
+    except Exception:
+        return []
+    result = []
+    for item in data or []:
+        if focused_only and not item.get("focused"):
+            continue
+        geometry = _geometry_from_rect(
+            (item.get("x", 0), item.get("y", 0), item.get("width", 0), item.get("height", 0)),
+            item.get("title") or "",
+        )
+        if geometry is not None:
+            result.append(geometry)
+    return result
+
+
+def _kdotool_geometry(output):
+    values = {}
+    for line in (output or "").splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            values[key.strip().lower()] = value.strip()
+    return _geometry_from_rect(
+        (
+            values.get("x", 0),
+            values.get("y", 0),
+            values.get("width", 0),
+            values.get("height", 0),
+        )
+    )
+
+
+def _kdotool_windows(focused_only=False):
+    """Soporte opcional para KDE mediante kdotool."""
+    if not session.which("kdotool"):
+        return []
+    if focused_only:
+        geometry = _kdotool_geometry(
+            session.command_output(
+                ["kdotool", "getactivewindow", "getwindowgeometry", "--shell"],
+                timeout=5,
+            )
+        )
+        return [geometry] if geometry is not None else []
+    ids = session.command_output(
+        ["kdotool", "search", "--onlyvisible", "--name", ""], timeout=5
+    )
+    result = []
+    for window_id in (ids or "").split():
+        geometry = _kdotool_geometry(
+            session.command_output(
+                ["kdotool", "getwindowgeometry", "--shell", window_id], timeout=5
+            )
+        )
+        if geometry is not None:
+            result.append(geometry)
+    return result
+
+
+def _wayland_windows(focused_only=False):
+    if session.is_sway():
+        tree = _sway_tree()
+        if tree is not None:
+            return _sway_windows(tree, focused_only=focused_only)
+    if session.is_hyprland():
+        windows = _hyprland_windows(focused_only=focused_only)
+        if windows:
+            return windows
+    if session.is_gnome():
+        windows = _gnome_windows(focused_only=focused_only)
+        if windows:
+            return windows
+    if session.is_kde():
+        windows = _kdotool_windows(focused_only=focused_only)
+        if windows:
+            return windows
+    return []
+
+
+def active_window_geometry():
+    """Geometria (x, y, w, h) de la ventana activa incluyendo marco."""
+    if is_wayland():
+        windows = _wayland_windows(focused_only=True)
+        return windows[0] if windows else None
+    return _x11_active_window_geometry()
+
+
 def list_windows():
-    """Lista de ventanas gestionadas por el WM con nombre y geometria."""
+    """Lista de ventanas con nombre y geometria (puede estar vacia en Wayland)."""
+    if is_wayland():
+        return _wayland_windows(focused_only=False)
+
     windows = []
     try:
         from Xlib import X
@@ -523,6 +938,52 @@ def list_windows():
     except Exception:
         pass
     return windows
+
+
+def window_at(x, y):
+    """Ventana (x, y, w, h) bajo un punto, de la mas alta a la mas baja."""
+    if is_wayland():
+        for window in reversed(list_windows()):
+            if (
+                window.x <= x < window.x + window.width
+                and window.y <= y < window.y + window.height
+            ):
+                return window.as_tuple()
+        return None
+    try:
+        from Xlib import X
+
+        d = _x11_display()
+        root = d.screen().root
+        child = root
+        while True:
+            try:
+                result = child.query_tree().children
+            except Exception:
+                break
+            found = None
+            for candidate in reversed(result):
+                try:
+                    cx, cy = _root_coords(candidate, root)
+                    geom = candidate.get_geometry()
+                    if cx <= x < cx + geom.width and cy <= y < cy + geom.height:
+                        found = candidate
+                        break
+                except Exception:
+                    continue
+            if found is None:
+                break
+            child = found
+            try:
+                if child.query_tree().parent.id == root.id:
+                    break
+            except Exception:
+                break
+        cx, cy = _root_coords(child, root)
+        geom = child.get_geometry()
+        return (cx, cy, geom.width, geom.height)
+    except Exception:
+        return None
 
 
 def _composite_cursor(image, geom):

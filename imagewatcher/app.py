@@ -13,7 +13,7 @@ gi.require_version("Gdk", "3.0")
 
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
-from . import __app_id__, __app_name__, __version__, capture, ui
+from . import __app_id__, __app_name__, __version__, capture, session, ui
 from .actions import HOTKEY_ACTIONS
 from .config import Config
 from .editor import EditorWindow
@@ -469,6 +469,11 @@ class Application:
                 self._finish_capture(image)
                 return False
             if mode == "region" and rect is None:
+                if capture.is_wayland():
+                    image = capture.capture_interactive_region()
+                    self.last_capture = {"mode": "region"}
+                    self._finish_capture(image)
+                    return False
                 base = capture.capture_screen()
                 selector = RegionSelector(
                     base,
@@ -480,7 +485,7 @@ class Application:
                 original_accept = selector._finish_accept
 
                 def accept(r):
-                    self.last_capture = {"mode": "region", "rect": r}
+                    self.last_capture = {"mode": "region", "rect": selector.rect_to_source(r)}
                     original_accept(r)
 
                 selector._finish_accept = accept
@@ -499,12 +504,13 @@ class Application:
                     on_cancel=self._on_capture_cancelled,
                     fixed_size=size,
                     snap_enabled=self.config.get("snap_enabled", True),
+                    preview_size=capture.region_preview_size(),
                 )
 
                 original_accept = selector._finish_accept
 
                 def accept(r):
-                    self.last_capture = {"mode": "fixed", "rect": r}
+                    self.last_capture = {"mode": "fixed", "rect": selector.rect_to_source(r)}
                     original_accept(r)
 
                 selector._finish_accept = accept
@@ -516,6 +522,7 @@ class Application:
                     on_cancel=self._on_capture_cancelled,
                     freehand=True,
                     snap_enabled=self.config.get("snap_enabled", True),
+                    preview_size=capture.region_preview_size(),
                 )
 
                 original_freehand = selector._finish_freehand
@@ -524,15 +531,36 @@ class Application:
                     pts = list(selector._freehand_points)
                     bbox = selector._points_bbox(pts)
                     if len(pts) >= 3 and bbox:
-                        self.last_capture = {"mode": "freehand", "rect": bbox, "points": pts}
+                        self.last_capture = {
+                            "mode": "freehand",
+                            "rect": selector.rect_to_source(bbox),
+                            "points": selector.points_to_source(pts),
+                        }
                     original_freehand()
 
                 selector._finish_freehand = finish_freehand
                 return False
             if mode == "window":
-                image = capture.capture_window(include_cursor=self.config.get("capture_cursor", False))
-                self.last_capture = {"mode": "window"}
+                if capture.is_wayland() and capture.active_window_geometry() is None:
+                    self._notify(
+                        "Ventana activa",
+                        "Wayland no permite detectarla; selecciona la ventana manualmente.",
+                    )
+                    image = capture.capture_interactive_region()
+                    self.last_capture = {"mode": "region"}
+                else:
+                    image = capture.capture_window(
+                        include_cursor=self.config.get("capture_cursor", False)
+                    )
+                    self.last_capture = {"mode": "window"}
             elif mode == "scrolling":
+                if capture.is_wayland() and not (
+                    session.which("ydotool") or session.which("wlrctl")
+                ):
+                    self._notify(
+                        "Ventana con desplazamiento",
+                        "En Wayland instala ydotool o wlrctl para simular la rueda.",
+                    )
                 image = capture.capture_scrolling_window()
                 self.last_capture = {"mode": "scrolling"}
             elif mode == "monitor":
@@ -542,9 +570,13 @@ class Application:
                 base = capture.capture_screen()
                 image = base.crop((rect[0], rect[1], rect[0] + rect[2], rect[1] + rect[3]))
             else:
-                image = capture.capture_screen()
+                image = capture.capture_screen(
+                    include_cursor=self.config.get("capture_cursor", False)
+                )
                 self.last_capture = {"mode": "fullscreen"}
             self._finish_capture(image)
+        except capture.CaptureCancelled:
+            self._on_capture_cancelled()
         except Exception as exc:
             self._notify("Error de captura", str(exc))
             self._set_bar_visible(True)
@@ -687,6 +719,9 @@ class Application:
     def _popup_menu_item(self, item):
         menu = item.get_submenu()
         menu.show_all()
+        if capture.is_wayland():
+            menu.popup_at_pointer(None)
+            return menu
         try:
             _, x, y = (
                 Gdk.Display.get_default()
@@ -756,7 +791,16 @@ class Application:
         self._sync_escape_grab()
 
     def _sync_escape_grab(self):
-        """Graba Escape mientras haya superposiciones para cerrarlas."""
+        """Graba Escape mientras haya superposiciones para cerrarlas.
+
+        En Wayland no existe captura global de teclas sin el portal; las
+        superposiciones interactivas ya cierran con Escape al tener el foco.
+        """
+        if capture.is_wayland():
+            if self._escape_active:
+                self._escape_grabber.stop()
+                self._escape_active = False
+            return
         any_visible = any(w.get_visible() for w in self._overlays.values())
         if any_visible and not self._escape_active:
             self._escape_grabber.set_callbacks({"escape": self._hide_overlays})
@@ -773,6 +817,9 @@ class Application:
         menu.append(self._capture_menu())
         menu.append(self._tools_category_menu())
         menu.show_all()
+        if capture.is_wayland():
+            menu.popup_at_pointer(None)
+            return menu
         try:
             _, x, y = Gdk.Display.get_default().get_default_seat().get_pointer().get_position()
             menu.popup(
@@ -1093,6 +1140,19 @@ class PreferencesDialog(Gtk.Dialog):
             False,
             0,
         )
+        if session.is_wayland():
+            box.pack_start(
+                Gtk.Label(
+                    label=(
+                        "En Wayland los atajos dependen del portal GlobalShortcuts del "
+                        "escritorio. Si no esta disponible, configuralos desde el sistema."
+                    ),
+                    xalign=0,
+                ),
+                False,
+                False,
+                0,
+            )
 
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -1231,8 +1291,8 @@ def main():
         level=logging.INFO,
         format="%(levelname)s %(name)s: %(message)s",
     )
-    if not os.environ.get("DISPLAY"):
-        logger.error("Se requiere un servidor X11 (DISPLAY no definido).")
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        logger.error("Se requiere una sesion grafica X11 o Wayland.")
         return 1
     app = Application()
     if app.config.get("show_welcome", True):

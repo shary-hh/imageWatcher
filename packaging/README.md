@@ -29,7 +29,9 @@ incrementarla ahi antes de empaquetar.
 
 - El `.deb` y el AppImage son **ligeros**: usan el Python+GTK del sistema
   (`python3-gi`, `gir1.2-gtk-3.0`, `python3-pil`, `python3-xlib`, `ffmpeg`),
-  declarados como dependencias del paquete.
+  declarados como dependencias del paquete. En Wayland se recomienda ademas
+  `xdg-desktop-portal` (+ backend del escritorio) y, en wlroots,
+  `grim`/`slurp`/`wf-recorder`.
 - El AppImage asume esas dependencias presentes en el sistema (habitual en
   Linux Mint). Si quieres uno 100% autocontenido habria que empaquetar
   CPython + GTK + typelibs con linuxdeploy, lo que multiplica el tamano.

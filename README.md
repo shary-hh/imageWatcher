@@ -1,8 +1,9 @@
 # imageWatcher (Linux Mint)
 
 Clon **libre y clean-room** de la funcionalidad de [PicPick](https://picpick.app/es/),
-reimplementado desde cero para **Linux Mint 22.3 (Cinnamon / X11)** con
-Python + GTK3 + Pillow + Xlib.
+reimplementado desde cero para **Linux** (probado en Linux Mint 22.3 con
+Cinnamon/X11, y compatible con GNOME, KDE Plasma, Sway y Hyprland en Wayland)
+con Python + GTK3 + Pillow + Xlib.
 
 > Aviso legal: este proyecto es una reimplementacion independiente basada en las
 > funciones descritas publicamente en la web de PicPick. No contiene ni usa codigo
@@ -67,8 +68,11 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 - **Pizarra** para dibujar y guardar.
 
 ### Grabacion de pantalla
-- Pantalla completa o region seleccionada, con `ffmpeg` (x11grab).
-- FPS ajustable y audio del sistema opcional.
+- X11: pantalla completa o region seleccionada, con `ffmpeg` (x11grab).
+- Wayland/wlroots: pantalla completa o region con `wf-recorder` (y `slurp`
+  para elegir la region).
+- Wayland/GNOME: grabacion de pantalla completa con la API de GNOME Shell.
+- FPS ajustable y audio del sistema opcional (segun el backend).
 
 ### Integracion
 - Barra de captura flotante (se puede ocultar desde Preferencias, la bandeja
@@ -80,8 +84,10 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 - Menus organizados por categorias: **Favoritos**, **Capturar** y
   **Herramientas**.
 - Icono en la bandeja del sistema.
-- Atajos de teclado globales (X11) configurables para capturas, editor,
-  grabador, herramientas de diseno y acciones de la aplicacion.
+- Atajos de teclado globales configurables para capturas, editor,
+  grabador, herramientas de diseno y acciones de la aplicacion. En X11 se usa
+  `XGrabKey`; en Wayland se usa el portal `GlobalShortcuts` cuando el escritorio
+  lo ofrece (si no, la app funciona sin atajos globales).
 - Preferencias persistentes en `~/.config/imagewatcher/config.json`.
 - Inicio automatico al entrar en sesion (opcional).
 
@@ -121,21 +127,71 @@ Leyenda: ✅ implementado · ◐ parcial · ✗ requiere servicio externo/cuenta
 - **GTK3 + PyGObject** — interfaz, `HeaderBar`, `DrawingArea`, portapapeles, impresion (`Gtk.PrintOperation`).
 - **Cairo** — dibujo vectorial y previews (mira, regla, transportador, retocar, resaltados).
 - **Pillow (PIL)** — operaciones raster: efectos, stitch de scroll, sombras, balance de color, sellos, lazo.
-- **GdkPixbuf / Gdk** — captura del framebuffer y conversion rapida a/desde PIL.
-- **Xlib + XTest + XFixes** — ventana activa, atajos globales, cursor real y scroll simulado.
+- **GdkPixbuf / Gdk** — captura del framebuffer en X11 y conversion rapida a/desde PIL.
+- **Xlib + XTest + XFixes** — ventana activa, atajos globales, cursor real y scroll simulado en X11.
+- **xdg-desktop-portal** — captura de pantalla, region nativa y atajos globales en Wayland.
+- **grim / slurp / wf-recorder** — captura y grabacion nativas en compositores wlroots.
 - **ffmpeg** — grabacion de video (`x11grab`, audio por `pulse`).
 
 ## Requisitos
 
-Linux Mint / Ubuntu sobre **X11** (Cinnamon por defecto). No funciona en Wayland
-porque usa `XGrabKey` y `x11grab`.
+Funciona en **X11** (Linux Mint / Cinnamon) y en **Wayland** (GNOME, KDE
+Plasma, Sway, Hyprland y otros compositores wlroots). En X11 usa Xlib/XTest;
+en Wayland usa el portal de escritorio y, cuando hace falta, herramientas
+nativas del compositor.
 
-Dependencias del sistema (ya presentes en la mayoria de instalaciones de Mint):
+Dependencias base:
 
 ```bash
 sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
                  python3-pil python3-xlib ffmpeg libnotify-bin
 ```
+
+Para Wayland se recomienda ademas:
+
+```bash
+# Portal de escritorio (GNOME/KDE/wlroots segun tu escritorio)
+sudo apt install xdg-desktop-portal
+# GNOME
+sudo apt install xdg-desktop-portal-gnome
+# KDE Plasma
+sudo apt install xdg-desktop-portal-kde
+# wlroots (Sway, Hyprland, etc.)
+sudo apt install xdg-desktop-portal-wlr grim slurp wf-recorder
+# Opcional: simulacion de rueda/scroll en Wayland
+sudo apt install ydotool wlrctl
+```
+
+`wf-recorder` y `slurp` son opcionales: habilitan grabacion y seleccion de
+region nativas en wlroots. En GNOME la grabacion usa la API de GNOME Shell y
+en KDE la app puede usar el portal para capturas.
+
+### Limitaciones en Wayland
+
+Wayland no permite a las aplicaciones leer la pantalla ni controlar el teclado
+global directamente. imageWatcher usa los mecanismos estandar disponibles:
+
+- La captura de pantalla y el selector de region pasan por
+  `xdg-desktop-portal` (puede aparecer un dialogo del sistema). Repetir una
+  captura de region vuelve a abrir el selector del portal.
+- La ventana activa y la lista de ventanas solo se pueden consultar en
+  compositores que exponen esa informacion (Sway, Hyprland o KDE con
+  `kdotool`). Si no esta disponible, la captura de ventana pide seleccionar la
+  region manualmente.
+- Los atajos globales requieren el portal `GlobalShortcuts`. Si el escritorio
+  no lo implementa (por ejemplo algunas versiones de GNOME), configura los
+  atajos desde el propio escritorio o usa la barra/menu de imageWatcher.
+- Las herramientas que siguen el puntero global (lupa, regla, punto de mira)
+  funcionan mejor en Hyprland/KDE, donde se puede consultar la posicion del
+  cursor; en otros compositores pueden quedar limitadas.
+- Con monitores de distinta escala (HiDPI mixto), el recorte de una region puede
+  ser aproximado porque el compositor entrega la captura en pixeles fisicos.
+- Las superposiciones no interactivas (por ejemplo la lupa) pueden no recibir
+  `Esc` en Wayland; usa *Ocultar superposiciones* o el menu para cerrarlas.
+- La grabacion de region esta disponible en wlroots con `wf-recorder`; en
+  GNOME se graba la pantalla completa. En KDE Plasma Wayland la grabacion
+  integrada no esta disponible actualmente.
+- En GNOME Wayland el icono de bandeja necesita la extension AppIndicator.
 
 ## Instalacion
 
@@ -206,8 +262,9 @@ docker build -f arena/Dockerfile -t imagewatcher-arena .
 docker run --rm imagewatcher-arena
 ```
 
-Incluye 52 pruebas (captura y su rendimiento, editor, efectos, render,
-herramientas y overlays, ventana de herramientas, config y atajos).
+Incluye pruebas de captura y su rendimiento, editor, efectos, render,
+herramientas y overlays, ventana de herramientas, config, atajos y la capa
+de compatibilidad con Wayland.
 
 ## Empaquetado
 
@@ -227,11 +284,12 @@ Detalles y limitaciones del `.exe` en `packaging/README.md` y
 ```
 imagewatcher/
   app.py           aplicacion, barra, bandeja y preferencias
-  capture.py       captura X11 (pantalla, ventana, region, cursor)
+  capture.py       captura X11/Wayland (pantalla, ventana, region, cursor)
+  session.py       deteccion de sesion, portal y herramientas Wayland
   region.py        overlay de seleccion de region
   editor.py        editor de imagenes con anotaciones y efectos
-  recorder.py      grabador de pantalla con ffmpeg
-  hotkeys.py       atajos globales con XGrabKey
+  recorder.py      grabador de pantalla (ffmpeg/wf-recorder/GNOME)
+  hotkeys.py       atajos globales (XGrabKey o portal GlobalShortcuts)
   config.py        preferencias persistentes
   gtk_util.py      utilidades GTK/PIL
   tools/           selector de color, lupa, regla, punto de mira, transportador, pizarra

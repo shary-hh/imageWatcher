@@ -36,14 +36,14 @@ Section: graphics
 Priority: optional
 Architecture: all
 Depends: python3 (>= 3.8), python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, python3-pil, python3-xlib, ffmpeg
-Recommends: libnotify-bin
+Recommends: libnotify-bin, xdg-desktop-portal, xdg-desktop-portal-gnome | xdg-desktop-portal-kde | xdg-desktop-portal-wlr
 Installed-Size: $INSTALLED_SIZE
 Maintainer: imageWatcher contributors <noreply@example.com>
 Description: Captura, edicion y grabacion de pantalla (clon libre de PicPick)
- imageWatcher es una suite de captura de pantalla para Linux sobre X11:
+ imageWatcher es una suite de captura de pantalla para Linux (X11 y Wayland):
  captura de pantalla completa, ventana y region; editor con anotaciones y
  efectos; herramientas de diseno (selector de color, lupa, regla, transportador,
- pizarra); grabacion de pantalla con ffmpeg; atajos globales y bandeja.
+ pizarra); grabacion de pantalla; atajos globales y bandeja.
 EOF
 
 cat > "$STAGE/DEBIAN/postinst" <<'EOF'

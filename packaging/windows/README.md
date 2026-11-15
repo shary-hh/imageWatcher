@@ -10,8 +10,9 @@ Salida: `dist\imageWatcher.exe`
 
 ## Importante: limitacion real
 
-Este clon esta escrito contra **X11** (captura con Gdk/Xlib, atajos con
-`XGrabKey`, grabacion con `ffmpeg x11grab`). Por eso el `.exe` se **compila**
+Este clon esta escrito para **Linux** (captura con Gdk/Xlib o
+xdg-desktop-portal, atajos con `XGrabKey` o el portal `GlobalShortcuts`,
+grabacion con `ffmpeg x11grab`/`wf-recorder`). Por eso el `.exe` se **compila**
 pero **no es funcional en Windows** salvo que se implemente un backend Windows
 (captura via Win32/GDI+, atajos con `RegisterHotKey`, grabacion con `gdigrab`).
 

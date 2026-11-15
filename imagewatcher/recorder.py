@@ -1,16 +1,19 @@
-"""Grabador de pantalla basado en ffmpeg x11grab."""
+"""Grabador de pantalla: ffmpeg/x11grab en X11 y wf-recorder/GNOME en Wayland."""
 import os
+import re
 import shutil
+import signal
 import subprocess
 import time
 
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gio", "2.0")
 
-from gi.repository import GLib, Gtk  # noqa: E402
+from gi.repository import Gio, GLib, Gtk  # noqa: E402
 
-from . import capture, ui  # noqa: E402
+from . import capture, session, ui  # noqa: E402
 
 
 def ffmpeg_path():
@@ -26,6 +29,18 @@ def has_encoder(name):
         return False
 
 
+def _detect_backend():
+    if not capture.is_wayland():
+        return "x11"
+    if session.is_gnome():
+        return "gnome"
+    if session.is_kde():
+        return None
+    if shutil.which("wf-recorder"):
+        return "wf-recorder"
+    return None
+
+
 class RecorderWindow(Gtk.Window):
     def __init__(self, config):
         super().__init__(title="Grabador de pantalla")
@@ -36,10 +51,20 @@ class RecorderWindow(Gtk.Window):
         self.output_path = None
         self.region = None
         self.region_offset = (0, 0)
+        self.region_geometry = None
+        self.backend = _detect_backend()
+        self._stop_signal = False
+        self._gnome_screencast = False
+        self._gnome_bus = None
         self.start_time = None
         self._timer = None
         self.set_default_size(440, 300)
-        self.set_titlebar(ui.header("Grabador de pantalla", "Video con ffmpeg", "media-record"))
+        subtitle = {
+            "x11": "Video con ffmpeg",
+            "wf-recorder": "Video con wf-recorder",
+            "gnome": "Video con GNOME Shell",
+        }.get(self.backend, "Grabacion no disponible")
+        self.set_titlebar(ui.header("Grabador de pantalla", subtitle, "media-record"))
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         root.set_margin_start(14)
@@ -67,7 +92,9 @@ class RecorderWindow(Gtk.Window):
         self.audio_check = Gtk.CheckButton()
         self.audio_check.set_active(config.get("record_audio", False))
         sink = capture.list_audio_sinks()
-        self.audio_check.set_sensitive(bool(sink))
+        self.audio_check.set_sensitive(
+            bool(sink) and self.backend in ("x11", "wf-recorder")
+        )
         grid.attach(self.audio_check, 1, 2, 1, 1)
 
         self.timer_label = Gtk.Label(label="00:00")
@@ -91,7 +118,19 @@ class RecorderWindow(Gtk.Window):
         self.connect("key-press-event", self._on_key)
         self.show_all()
 
-        if not ffmpeg_path():
+        if self.backend is None:
+            self.start_btn.set_sensitive(False)
+            if capture.is_wayland() and session.is_kde():
+                self.status.set_text(
+                    "KDE Wayland: la grabacion integrada no esta disponible."
+                )
+            elif capture.is_wayland():
+                self.status.set_text(
+                    "Wayland: instala wf-recorder (wlroots) o usa GNOME Shell."
+                )
+            else:
+                self.status.set_text("No hay un backend de grabacion disponible.")
+        elif self.backend == "x11" and not ffmpeg_path():
             self.start_btn.set_sensitive(False)
             self.status.set_text("ffmpeg no esta instalado (sudo apt install ffmpeg)")
 
@@ -104,8 +143,16 @@ class RecorderWindow(Gtk.Window):
         return False
 
     def _pick_region(self, *_):
-        base = capture.capture_screen()
-        self.hide()
+        if capture.is_wayland():
+            self._pick_region_wayland()
+            return
+        try:
+            self.hide()
+            base = capture.capture_screen()
+        except Exception as exc:
+            self.show()
+            self.status.set_text(f"No se pudo capturar la pantalla: {exc}")
+            return
         from .region import RegionSelector
 
         holder = {}
@@ -126,7 +173,102 @@ class RecorderWindow(Gtk.Window):
 
         selector._finish_accept = accept
 
+    def _pick_region_wayland(self):
+        if self.backend is None:
+            self.status.set_text("No hay un backend de grabacion disponible.")
+            return
+        if self.backend == "gnome":
+            self.status.set_text(
+                "GNOME Wayland solo permite grabar la pantalla completa desde aqui."
+            )
+            return
+        if shutil.which("slurp"):
+            self.hide()
+            output = session.command_output(["slurp"], timeout=120)
+            if not output:
+                self.show()
+                return
+            match = re.search(r"(-?\d+),(-?\d+)\s+(\d+)x(\d+)", output.strip())
+            if match is None:
+                self.show()
+                self.status.set_text("No se pudo interpretar la region de slurp.")
+                return
+            x, y, width, height = (int(value) for value in match.groups())
+            self.region_geometry = (x, y, width, height)
+            self.area_label.set_text(f"Region {width}x{height}")
+            self.show()
+            return
+
+        try:
+            self.hide()
+            base = capture.capture_screen()
+        except Exception as exc:
+            self.show()
+            self.status.set_text(f"No se pudo capturar la pantalla: {exc}")
+            return
+        from .region import RegionSelector
+
+        holder = {}
+
+        def finished(image):
+            self.region = image
+            rect = holder.get("rect")
+            if rect:
+                self.region_geometry = capture.image_to_logical_box(rect, base)
+            else:
+                self.region_geometry = capture.image_to_logical_box(
+                    (0, 0, base.width, base.height), base
+                )
+            self.area_label.set_text(f"Region {image.width}x{image.height}")
+            self.show()
+
+        selector = RegionSelector(
+            base,
+            finished,
+            on_cancel=self.show,
+            detect_windows=False,
+            preview_size=capture.region_preview_size(),
+        )
+        original_accept = selector._finish_accept
+
+        def accept(rect):
+            holder["rect"] = selector.rect_to_source(rect)
+            original_accept(rect)
+
+        selector._finish_accept = accept
+
+    def _output_path(self, extension=".mp4"):
+        directory = self.config.ensure_save_dir()
+        return os.path.join(
+            str(directory), time.strftime("grabacion_%Y%m%d_%H%M%S") + extension
+        )
+
+    def _build_command_wayland(self):
+        fps = int(self.fps_spin.get_value())
+        self.output_path = self._output_path(".mp4")
+        if self.backend != "wf-recorder":
+            return None
+        cmd = [
+            shutil.which("wf-recorder"),
+            "-f", self.output_path,
+            "-r", str(fps),
+            "--pixel-format", "yuv420p",
+        ]
+        if self.region_geometry:
+            x, y, width, height = self.region_geometry
+            cmd += ["-g", f"{x},{y} {width}x{height}"]
+        if self.audio_check.get_active():
+            sinks = capture.list_audio_sinks()
+            if sinks:
+                monitor = sinks[0]
+                if not monitor.endswith(".monitor"):
+                    monitor = monitor + ".monitor"
+                cmd += [f"--audio={monitor}"]
+        return cmd
+
     def _build_command(self):
+        if capture.is_wayland():
+            return self._build_command_wayland()
         display = os.environ.get("DISPLAY", ":0.0")
         fps = int(self.fps_spin.get_value())
         monitors = capture.monitor_geometries()
@@ -171,6 +313,9 @@ class RecorderWindow(Gtk.Window):
         return cmd
 
     def _start(self):
+        if self.backend == "gnome":
+            self._start_gnome()
+            return
         cmd = self._build_command()
         if not cmd:
             self.status.set_text("No se pudo preparar la grabacion")
@@ -182,6 +327,50 @@ class RecorderWindow(Gtk.Window):
         except Exception as exc:
             self.status.set_text(f"Error: {exc}")
             return
+        self._stop_signal = self.backend == "wf-recorder"
+        self.start_time = time.time()
+        self.start_btn.set_sensitive(False)
+        self.stop_btn.set_sensitive(True)
+        self.status.set_text(f"Grabando en {self.output_path}")
+        if self._timer:
+            GLib.source_remove(self._timer)
+        self._timer = GLib.timeout_add(500, self._tick)
+
+    def _start_gnome(self):
+        fps = int(self.fps_spin.get_value())
+        template = self._output_path(".webm")
+        try:
+            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+            reply = bus.call_sync(
+                "org.gnome.Shell",
+                "/org/gnome/Shell/Screencast",
+                "org.gnome.Shell.Screencast",
+                "Screencast",
+                GLib.Variant(
+                    "(sa{sv})",
+                    (
+                        template,
+                        {
+                            "framerate": GLib.Variant("i", fps),
+                            "draw-cursor": GLib.Variant("b", True),
+                        },
+                    ),
+                ),
+                GLib.VariantType.new("(bs)"),
+                Gio.DBusCallFlags.NONE,
+                10000,
+                None,
+            )
+            success, filename = reply.unpack()
+        except Exception as exc:
+            self.status.set_text(f"Error: {exc}")
+            return
+        if not success:
+            self.status.set_text("GNOME Shell rechazo la grabacion.")
+            return
+        self._gnome_bus = bus
+        self._gnome_screencast = True
+        self.output_path = filename
         self.start_time = time.time()
         self.start_btn.set_sensitive(False)
         self.stop_btn.set_sensitive(True)
@@ -191,7 +380,7 @@ class RecorderWindow(Gtk.Window):
         self._timer = GLib.timeout_add(500, self._tick)
 
     def _tick(self):
-        if not self.process:
+        if not self.process and not self._gnome_screencast:
             self._timer = None
             return False
         elapsed = int(time.time() - self.start_time) if self.start_time else 0
@@ -202,10 +391,33 @@ class RecorderWindow(Gtk.Window):
         if self._timer:
             GLib.source_remove(self._timer)
             self._timer = None
+        if self._gnome_screencast:
+            try:
+                self._gnome_bus.call_sync(
+                    "org.gnome.Shell",
+                    "/org/gnome/Shell/Screencast",
+                    "org.gnome.Shell.Screencast",
+                    "StopScreencast",
+                    None,
+                    None,
+                    Gio.DBusCallFlags.NONE,
+                    5000,
+                    None,
+                )
+            except Exception:
+                pass
+            self._gnome_screencast = False
+            self._gnome_bus = None
+            self.start_btn.set_sensitive(self.backend is not None)
+            self.stop_btn.set_sensitive(False)
+            self.status.set_text(f"Guardado: {self.output_path}")
         if self.process:
             try:
-                self.process.stdin.write(b"q")
-                self.process.stdin.flush()
+                if self._stop_signal:
+                    self.process.send_signal(signal.SIGINT)
+                else:
+                    self.process.stdin.write(b"q")
+                    self.process.stdin.flush()
                 self.process.wait(timeout=10)
             except Exception:
                 try:
@@ -213,7 +425,10 @@ class RecorderWindow(Gtk.Window):
                 except Exception:
                     pass
             self.process = None
-            self.start_btn.set_sensitive(bool(ffmpeg_path()))
+            self.start_btn.set_sensitive(
+                self.backend is not None
+                and (self.backend != "x11" or bool(ffmpeg_path()))
+            )
             self.stop_btn.set_sensitive(False)
             self.status.set_text(f"Guardado: {self.output_path}")
 

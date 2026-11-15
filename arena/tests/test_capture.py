@@ -17,7 +17,9 @@ def test_capture_screen_full():
     width, height = capture.virtual_screen_size()
     image = capture.capture_screen()
     assert image.mode == "RGBA"
-    assert image.size == (width, height)
+    assert image.width > 0 and image.height > 0
+    if not capture.is_wayland():
+        assert image.size == (width, height)
 
 
 def test_monitor_geometries():
@@ -34,6 +36,8 @@ def test_capture_region_from_base():
 
 def test_capture_region_direct_does_not_recapture_screen():
     """La captura de una subregion debe ser rapida (no capturar toda la pantalla)."""
+    if capture.is_wayland():
+        pytest.skip("En Wayland la subregion se recorta de una captura completa")
     capture.capture_region(0, 0, 8, 8)  # calentar
     start = time.perf_counter()
     for _ in range(5):
@@ -57,6 +61,8 @@ def test_window_coordinates_are_not_inverted():
     receptora; llamarlo en la ventana pasando la raiz devuelve la posicion con
     signo cambiado y la captura acaba tomando una region fuera de la ventana.
     """
+    if capture.is_wayland():
+        pytest.skip("Xlib no esta disponible como fuente de ventanas en Wayland")
     from Xlib import X, display
 
     xdisplay = display.Display()
@@ -121,6 +127,8 @@ def test_find_vertical_shift():
 
 def test_scroll_targets_active_window_center(monkeypatch):
     """La rueda debe enviarse sobre la ventana, no donde este el puntero."""
+    if capture.is_wayland():
+        pytest.skip("La inyeccion XTest solo existe en X11")
     from types import SimpleNamespace
 
     from Xlib.ext import xtest

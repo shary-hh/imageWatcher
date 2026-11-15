@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Instalador para Linux Mint / Ubuntu (X11).
+# Instalador para Linux Mint / Ubuntu (X11 y Wayland).
 # Instala dependencias del sistema, crea el lanzador y la entrada de menu.
 set -euo pipefail
 
@@ -13,6 +13,24 @@ sudo apt update
 sudo apt install -y \
     python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
     python3-pil python3-xlib ffmpeg libnotify-bin
+
+if [ "${XDG_SESSION_TYPE:-}" = "wayland" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    echo "==> Wayland detectado; instalando soporte de portal..."
+    sudo apt install -y xdg-desktop-portal || true
+    desktop="${XDG_CURRENT_DESKTOP:-}"
+    desktop="${desktop,,}"
+    case "$desktop" in
+        *gnome*|*ubuntu*|*unity*)
+            sudo apt install -y xdg-desktop-portal-gnome || true
+            ;;
+        *kde*|*plasma*)
+            sudo apt install -y xdg-desktop-portal-kde || true
+            ;;
+        *sway*|*hyprland*|*wlroots*|*river*|*wayfire*|*labwc*)
+            sudo apt install -y xdg-desktop-portal-wlr grim slurp wf-recorder || true
+            ;;
+    esac
+fi
 
 echo "==> Creando lanzador en $BIN_DIR/imagewatcher"
 mkdir -p "$BIN_DIR"

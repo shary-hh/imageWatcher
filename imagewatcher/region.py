@@ -120,14 +120,27 @@ class RegionSelector(Gtk.Window):
 
     def __init__(self, base_image, on_done, on_cancel=None, detect_windows=True,
                  fixed_size=None, freehand=False, initial_rect=None,
-                 snap_enabled=True):
+                 snap_enabled=True, preview_size=None):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
-        self.base = base_image
-        self._pixbuf = pil_to_pixbuf(base_image)
+        self.source = base_image
+        if preview_size and tuple(int(v) for v in preview_size) != base_image.size:
+            width, height = (max(1, int(v)) for v in preview_size)
+            resample = getattr(Image, "Resampling", Image).LANCZOS
+            self.base = base_image.resize((width, height), resample)
+            self._source_scale = (
+                base_image.width / width,
+                base_image.height / height,
+            )
+        else:
+            self.base = base_image
+            self._source_scale = (1.0, 1.0)
+        self._pixbuf = pil_to_pixbuf(self.base)
         self.snap_enabled = bool(snap_enabled)
         if self.snap_enabled:
             try:
-                self._snap_x, self._snap_y = build_snap_lines(base_image)
+                self._snap_x, self._snap_y = build_snap_lines(
+                    self.base, include_windows=(self._source_scale == (1.0, 1.0))
+                )
             except Exception:
                 self._snap_x, self._snap_y = [], []
         else:
@@ -135,7 +148,14 @@ class RegionSelector(Gtk.Window):
         self.on_done = on_done
         self.on_cancel = on_cancel
         self.detect_windows = detect_windows
-        self.fixed_size = tuple(int(v) for v in fixed_size) if fixed_size else None
+        if fixed_size:
+            sx, sy = self._source_scale
+            self.fixed_size = (
+                max(1, int(round(fixed_size[0] / sx))),
+                max(1, int(round(fixed_size[1] / sy))),
+            )
+        else:
+            self.fixed_size = None
         self.freehand_mode = bool(freehand)
         self._freehand_points = []
 
@@ -190,9 +210,26 @@ class RegionSelector(Gtk.Window):
 
         self.set_can_focus(True)
         self.show_all()
-        self.fullscreen()
+        if self._preview_is_wayland():
+            try:
+                from . import capture
+
+                self.fullscreen_on_monitor(self.get_screen(), capture.region_monitor_index())
+            except Exception:
+                self.fullscreen()
+        else:
+            self.fullscreen()
         self.present()
         GLib.timeout_add(50, self._grab)
+
+    @staticmethod
+    def _preview_is_wayland():
+        try:
+            from . import capture
+
+            return capture.is_wayland()
+        except Exception:
+            return False
 
     def _grab(self):
         try:
@@ -328,7 +365,7 @@ class RegionSelector(Gtk.Window):
             self.rect = self._resize(*self._snap_point((x, y)))
         else:
             self._update_cursor(x, y)
-            if self.detect_windows and self.rect is None:
+            if self.detect_windows and self._source_scale == (1.0, 1.0) and self.rect is None:
                 if self._last_hover is None or abs(x - self._last_hover[0]) + abs(y - self._last_hover[1]) > 6:
                     self._last_hover = (x, y)
                     self.hover_rect = self._window_at(x, y)
@@ -492,35 +529,7 @@ class RegionSelector(Gtk.Window):
         try:
             from . import capture
 
-            d = capture._x11_display()
-            root = d.screen().root
-            child = root
-            while True:
-                try:
-                    result = child.query_tree().children
-                except Exception:
-                    break
-                found = None
-                for candidate in reversed(result):
-                    try:
-                        cx, cy = capture._root_coords(candidate, root)
-                        geom = candidate.get_geometry()
-                        if cx <= x < cx + geom.width and cy <= y < cy + geom.height:
-                            found = candidate
-                            break
-                    except Exception:
-                        continue
-                if found is None:
-                    break
-                child = found
-                try:
-                    if child.query_tree().parent.id == root.id:
-                        break
-                except Exception:
-                    break
-            cx, cy = capture._root_coords(child, root)
-            geom = child.get_geometry()
-            return (cx, cy, geom.width, geom.height)
+            return capture.window_at(x, y)
         except Exception:
             return None
 
@@ -532,12 +541,31 @@ class RegionSelector(Gtk.Window):
         if callback:
             callback(image)
 
+    def rect_to_source(self, rect):
+        """Convierte un rectangulo de la vista previa a pixeles de la fuente."""
+        sx, sy = self._source_scale
+        x, y, width, height = rect
+        left = max(0, min(int(round(x * sx)), self.source.width - 1))
+        top = max(0, min(int(round(y * sy)), self.source.height - 1))
+        right = max(left + 1, min(int(round((x + width) * sx)), self.source.width))
+        bottom = max(top + 1, min(int(round((y + height) * sy)), self.source.height))
+        return (left, top, right - left, bottom - top)
+
+    def _source_size_text(self, rect):
+        _x, _y, width, height = self.rect_to_source(rect)
+        return f"{width} x {height} px"
+
+    def points_to_source(self, points):
+        sx, sy = self._source_scale
+        return [(int(round(px * sx)), int(round(py * sy))) for px, py in points]
+
     def _finish_accept(self, rect):
-        image = self.base.crop((rect[0], rect[1], rect[0] + rect[2], rect[1] + rect[3]))
+        left, top, width, height = self.rect_to_source(rect)
+        image = self.source.crop((left, top, left + width, top + height))
         self._complete(image)
 
     def _finish_freehand(self):
-        image = extract_freehand(self.base, self._freehand_points)
+        image = extract_freehand(self.source, self.points_to_source(self._freehand_points))
         if image is None:
             self._freehand_points = []
             self.rect = None
@@ -574,7 +602,7 @@ class RegionSelector(Gtk.Window):
             cr.rectangle(rx + 0.5, ry + 0.5, rw, rh)
             cr.stroke()
 
-            self._draw_badge(cr, rx, ry, f"{rw} x {rh} px")
+            self._draw_badge(cr, rx, ry, self._source_size_text(rect))
 
             if self.rect and not self.fixed_size:
                 self._draw_handles(cr)
@@ -620,7 +648,7 @@ class RegionSelector(Gtk.Window):
 
         if self.rect:
             rx, ry, rw, rh = self.rect
-            self._draw_badge(cr, rx, ry, f"{rw} x {rh} px")
+            self._draw_badge(cr, rx, ry, self._source_size_text(rect))
         self._draw_hint(
             cr, "Dibuja una forma para capturar   L: rectangulo   Esc: cancelar"
         )
