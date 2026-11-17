@@ -23,9 +23,62 @@ def test_actions_registry_is_complete():
 def test_parse_modifiers_and_key():
     manager = HotkeyManager()
     assert manager._parse("Ctrl+Alt+1") == (0x0004 | 0x0008, "1")
-    assert manager._parse("Print") == (0, "print")
+    assert manager._parse("Print") == (0, "Print")
+    assert manager._parse("ImpPm") == (0, "Print")
+    assert manager._parse("Shift+Impr Pant") == (0x0001, "Print")
     assert manager._parse("Shift+Alt+P") == (0x0001 | 0x0008, "p")
     assert manager._parse("") is None
+
+
+def test_parse_cinnamon_accelerator():
+    from imagewatcher.hotkeys import parse_accelerator, parse_hotkey
+
+    assert parse_hotkey("ImpPm") == (0, "Print")
+    assert parse_accelerator("Print") == (0, "Print")
+    assert parse_accelerator("<Alt>Print") == (0x0008, "Print")
+    assert parse_accelerator("<Control><Shift>Print") == (0x0004 | 0x0001, "Print")
+
+
+def test_cinnamon_conflicts_only_apply_to_cinnamon(monkeypatch):
+    from imagewatcher import hotkeys as hotkeys_module
+
+    monkeypatch.setattr(hotkeys_module.session, "is_cinnamon", lambda: False)
+    assert hotkeys_module.cinnamon_print_conflicts(["Print"]) == {}
+
+
+class _FakeSettings:
+    def __init__(self, values):
+        self.values = values
+        self.synced = False
+
+    def get_strv(self, key):
+        return list(self.values.get(key, []))
+
+    def set_strv(self, key, value):
+        self.values[key] = list(value)
+
+    def sync(self):
+        self.synced = True
+
+
+def test_detect_and_free_cinnamon_print(monkeypatch):
+    from imagewatcher import hotkeys as hotkeys_module
+
+    fake = _FakeSettings(
+        {
+            "screenshot": ["Print", "<Super>s"],
+            "window-screenshot": ["<Alt>Print"],
+        }
+    )
+    monkeypatch.setattr(hotkeys_module, "cinnamon_settings", lambda: fake)
+
+    conflicts = hotkeys_module.cinnamon_print_conflicts(["ImpPm"])
+    assert conflicts == {"screenshot": ["Print"]}
+
+    assert hotkeys_module.free_cinnamon_bindings(conflicts) is True
+    assert fake.values["screenshot"] == ["<Super>s"]
+    assert fake.values["window-screenshot"] == ["<Alt>Print"]
+    assert fake.synced is True
 
 
 def test_preferences_lists_every_hotkey_action(monkeypatch, tmp_path):

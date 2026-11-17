@@ -7,6 +7,8 @@ funcionando sin atajos globales y se informa del motivo.
 """
 import logging
 import os
+import re
+import select
 import threading
 import time
 
@@ -63,9 +65,135 @@ KEY_ALIASES = {
     "pagedown": "Page_Down",
     "page_up": "Page_Up",
     "page_down": "Page_Down",
+    # La tecla Impr Pant se etiqueta de varias formas segun la distribucion.
+    "print": "Print",
+    "printscreen": "Print",
+    "print_screen": "Print",
+    "print screen": "Print",
+    "prtsc": "Print",
+    "prtscr": "Print",
+    "impr": "Print",
+    "imprpant": "Print",
+    "impr_pant": "Print",
+    "impr pant": "Print",
+    "imppm": "Print",
+    "imp_pm": "Print",
+    "imp pm": "Print",
 }
 
+ACCELERATOR_MODIFIERS = {
+    "ctrl": 0x0004,
+    "control": 0x0004,
+    "shift": 0x0001,
+    "alt": 0x0008,
+    "mod1": 0x0008,
+    "super": 0x0040,
+    "win": 0x0040,
+    "meta": 0x0040,
+    "mod4": 0x0040,
+}
+
+CINNAMON_MEDIA_SCHEMA = "org.cinnamon.desktop.keybindings.media-keys"
+CINNAMON_SCREENSHOT_KEYS = (
+    "screenshot",
+    "window-screenshot",
+    "area-screenshot",
+    "screenshot-clip",
+    "window-screenshot-clip",
+    "area-screenshot-clip",
+)
+
 IGNORED_MASK = 0x0002 | 0x0010  # LockMask | Mod2Mask
+
+
+def parse_hotkey(spec):
+    """Convierte 'Ctrl+Alt+1' o 'ImpPm' en (mascara_modificadores, tecla)."""
+    if not spec:
+        return None
+    tokens = [token.strip().lower() for token in str(spec).split("+") if token.strip()]
+    if not tokens:
+        return None
+    mods = 0
+    for token in tokens[:-1]:
+        mods |= MODIFIERS.get(token, 0)
+    key_name = KEY_ALIASES.get(tokens[-1], tokens[-1])
+    return mods, key_name
+
+
+def parse_accelerator(spec):
+    """Convierte un atajo de Cinnamon ('<Alt>Print') al mismo formato."""
+    text = str(spec or "")
+    mods = 0
+    for name in re.findall(r"<([^>]+)>", text):
+        mods |= ACCELERATOR_MODIFIERS.get(name.strip().lower(), 0)
+    key = re.sub(r"<[^>]+>", "", text).strip().lower()
+    key = KEY_ALIASES.get(key, key)
+    return mods, key
+
+
+def cinnamon_settings():
+    """Ajustes de atajos de Cinnamon, o None si no aplica."""
+    if session.is_wayland() or not session.is_cinnamon():
+        return None
+    try:
+        source = Gio.SettingsSchemaSource.get_default()
+        if source is None or source.lookup(CINNAMON_MEDIA_SCHEMA, True) is None:
+            return None
+        return Gio.Settings.new(CINNAMON_MEDIA_SCHEMA)
+    except Exception:
+        return None
+
+
+def cinnamon_print_conflicts(specs):
+    """Atajos de captura de Cinnamon que chocan con los ``specs`` pedidos.
+
+    Devuelve ``{clave_de_ajuste: [atajos_en_conflicto]}``. Solo se tienen en
+    cuenta las teclas de captura de pantalla de Cinnamon, que son las que
+    impiden registrar ImpPm/Print en imageWatcher.
+    """
+    settings = cinnamon_settings()
+    if settings is None:
+        return {}
+    wanted = {parse_hotkey(spec) for spec in specs if spec}
+    wanted.discard(None)
+    if not wanted:
+        return {}
+    conflicts = {}
+    for key in CINNAMON_SCREENSHOT_KEYS:
+        try:
+            accels = settings.get_strv(key)
+        except Exception:
+            continue
+        matches = [accel for accel in accels if parse_accelerator(accel) in wanted]
+        if matches:
+            conflicts[key] = matches
+    return conflicts
+
+
+def free_cinnamon_bindings(conflicts):
+    """Quita de Cinnamon los atajos indicados por ``conflicts``."""
+    settings = cinnamon_settings()
+    if settings is None or not conflicts:
+        return False
+    changed = False
+    for key, accels in conflicts.items():
+        try:
+            current = settings.get_strv(key)
+        except Exception:
+            continue
+        remaining = [accel for accel in current if accel not in accels]
+        if remaining != current:
+            try:
+                settings.set_strv(key, remaining)
+                changed = True
+            except Exception:
+                pass
+    if changed:
+        try:
+            settings.sync()
+        except Exception:
+            pass
+    return changed
 
 
 class HotkeyManager:
@@ -84,15 +212,7 @@ class HotkeyManager:
         self._portal_actions = {}
 
     def _parse(self, spec):
-        tokens = [token.strip().lower() for token in spec.split("+") if token.strip()]
-        if not tokens:
-            return None
-        mods = 0
-        key_name = tokens[-1]
-        for token in tokens[:-1]:
-            if token in MODIFIERS:
-                mods |= MODIFIERS[token]
-        return mods, key_name
+        return parse_hotkey(spec)
 
     def _portal_trigger(self, spec):
         tokens = [token.strip().lower() for token in spec.split("+") if token.strip()]
@@ -401,7 +521,8 @@ class HotkeyManager:
                     event = self._display.next_event()
                     if event.type == X.KeyPress:
                         self._handle(event)
-                time.sleep(0.04)
+                # Bloquea hasta que llegue actividad a X11: sin sondeo.
+                select.select([self._display.fileno()], [], [], 0.5)
             except Exception:
                 break
 

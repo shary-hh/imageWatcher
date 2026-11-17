@@ -18,7 +18,12 @@ from . import __app_id__, __app_name__, __version__, capture, session, ui
 from .actions import HOTKEY_ACTIONS
 from .config import Config
 from .editor import EditorWindow
-from .hotkeys import HotkeyManager
+from .hotkeys import (
+    HotkeyManager,
+    cinnamon_print_conflicts,
+    free_cinnamon_bindings,
+)
+from .memory import trim_memory
 from .recorder import open_recorder
 from .region import RegionSelector, ask_fixed_size, extract_freehand
 from .single_instance import SingleInstance
@@ -644,6 +649,11 @@ class Application:
     def _forget_editor(self, editor):
         if editor in self.editors:
             self.editors.remove(editor)
+        try:
+            editor.release_resources()
+        except Exception:
+            pass
+        trim_memory()
 
     def open_editor_blank(self):
         from PIL import Image
@@ -663,17 +673,22 @@ class Application:
                     pass
             window = open_recorder(self.config)
             window.connect("destroy", lambda *_: self.tool_windows.pop("recorder", None))
+            window.connect("destroy", lambda *_: trim_memory())
             self.tool_windows["recorder"] = window
             return window
         if name in ("color", "palette"):
-            return color_picker.open_color_picker(
+            window = color_picker.open_color_picker(
                 on_pick=self._remember_color,
                 color_format=self.config.get("color_format", "hex"),
                 history=self.config.get("color_history", []),
                 zoom=self.config.get("color_zoom", 11),
             )
+            window.connect("destroy", lambda *_: trim_memory())
+            return window
         if name == "whiteboard":
-            return whiteboard.open_whiteboard(self.config)
+            window = whiteboard.open_whiteboard(self.config)
+            window.connect("destroy", lambda *_: trim_memory())
+            return window
         if name in OPEN_OVERLAY_MODES:
             return self._toggle_overlay(name)
         return None
@@ -1195,7 +1210,7 @@ class PreferencesDialog(Gtk.Dialog):
         box.pack_start(
             Gtk.Label(
                 label=(
-                    "Formato: modificadores + tecla, p.ej. 'Ctrl+Alt+1' o 'Print'.\n"
+                    "Formato: modificadores + tecla, p.ej. 'Ctrl+Alt+1', 'ImpPm' o 'Print'.\n"
                     "Si un atajo falla, desactiva el que use Cinnamon en Preferencias del sistema."
                 ),
                 xalign=0,
@@ -1204,6 +1219,15 @@ class PreferencesDialog(Gtk.Dialog):
             False,
             0,
         )
+
+        self.print_button = Gtk.Button(label="Usar ImpPm para la ventana activa")
+        self.print_button.set_tooltip_text(
+            "Asigna la tecla ImpPm (Print) a 'Ventana activa'. Al guardar, "
+            "imageWatcher pedira permiso para quitar ese atajo a Cinnamon."
+        )
+        self.print_button.connect("clicked", self._use_print_for_window)
+        box.pack_start(self.print_button, False, False, 0)
+
         if session.is_wayland():
             box.pack_start(
                 Gtk.Label(
@@ -1248,6 +1272,14 @@ class PreferencesDialog(Gtk.Dialog):
         scroller.add(content)
         box.pack_start(scroller, True, True, 0)
         return box
+
+    def _use_print_for_window(self, _button=None):
+        entry = self.hotkey_entries.get("window")
+        if entry is None:
+            return
+        entry.set_text("Print")
+        entry.set_position(-1)
+        entry.grab_focus()
 
     def _favorites_page(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -1333,12 +1365,65 @@ class PreferencesDialog(Gtk.Dialog):
         ]
         self.config.save()
         self._set_autostart(self.autostart_check.get_active())
-        self.app.apply_hotkeys()
+        self._apply_hotkeys()
         self.app._apply_bar_preference()
         bar = getattr(self.app, "bar", None)
         if bar is not None:
             bar._refresh_favorites()
         self.app._refresh_tray_menu()
+
+    def _apply_hotkeys(self):
+        conflicts = {}
+        if self.config.get("hotkeys_enabled", True):
+            specs = [
+                spec for spec in self.config.data["hotkeys"].values() if spec
+            ]
+            conflicts = cinnamon_print_conflicts(specs)
+        if conflicts and self._confirm_free_cinnamon(conflicts):
+            if free_cinnamon_bindings(conflicts):
+                app = self.app
+
+                def _reapply():
+                    # Cinnamon tarda un instante en soltar la tecla.
+                    app.apply_hotkeys()
+                    if app.hotkeys.failures:
+                        app._notify(
+                            "Atajos globales", "; ".join(app.hotkeys.failures)
+                        )
+                    return False
+
+                GLib.timeout_add(700, _reapply)
+                return
+            logger.warning(
+                "No se pudieron liberar los atajos de Cinnamon: %s", conflicts
+            )
+        self.app.apply_hotkeys()
+
+    def _confirm_free_cinnamon(self, conflicts):
+        combos = sorted({accel for accels in conflicts.values() for accel in accels})
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            modal=True,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.NONE,
+            text="Ese atajo ya esta en uso por Cinnamon",
+        )
+        dialog.format_secondary_text(
+            "Cinnamon usa "
+            + ", ".join(combos)
+            + " para sus capturas de pantalla. Para que imageWatcher pueda usar "
+            "esa tecla hay que quitar ese atajo de Cinnamon.\n\n"
+            "¿Quieres liberarlo? Podras volver a asignarlo en Preferencias del "
+            "sistema > Teclado > Atajos."
+        )
+        dialog.add_button("Cancelar", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Liberar atajo", Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        ui.apply_dark(dialog)
+        try:
+            return dialog.run() == Gtk.ResponseType.OK
+        finally:
+            dialog.destroy()
 
     def _autostart_path(self):
         return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "autostart" / f"{__app_id__}.desktop"

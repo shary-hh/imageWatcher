@@ -7,17 +7,17 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
 
-from gi.repository import Gdk, GdkPixbuf, Gtk  # noqa: E402
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk  # noqa: E402
 from PIL import Image  # noqa: E402
 
 
 def pil_to_pixbuf(image):
-    """Convierte una imagen PIL (RGBA/RGB) a GdkPixbuf sin perdida."""
+    """Convierte una imagen PIL (RGBA/RGB) a GdkPixbuf sin copia extra."""
     if image.mode != "RGBA":
         image = image.convert("RGBA")
     data = image.tobytes()
-    pixbuf = GdkPixbuf.Pixbuf.new_from_data(
-        data,
+    return GdkPixbuf.Pixbuf.new_from_bytes(
+        GLib.Bytes.new(data),
         GdkPixbuf.Colorspace.RGB,
         True,
         8,
@@ -25,7 +25,6 @@ def pil_to_pixbuf(image):
         image.height,
         image.width * 4,
     )
-    return pixbuf.copy()
 
 
 def pixbuf_to_pil(pixbuf):

@@ -225,19 +225,33 @@ Puedes mover la barra arrastrandola.
 
 Los atajos se cambian en **Preferencias > Atajos** con el formato
 `modificadores+tecla`, por ejemplo `Print`, `Ctrl+Alt+1` o `Shift+Alt+P`.
+La tecla Impr Pant se puede escribir como `ImpPm`, `Impr Pant`, `PrintScreen`
+o `Print`. El boton **Usar ImpPm para la ventana activa** asigna `Print` a la
+captura de la ventana activa; al guardar, imageWatcher ofrece quitar el atajo
+que Cinnamon usa para sus propias capturas, para que la tecla quede libre.
 Ademas de las capturas se pueden asignar atajos al editor, grabador,
 herramientas de diseno (color, lupa, regla, punto de mira, transportador,
 pizarra), ocultar superposiciones, mostrar/ocultar la barra, preferencias,
 guia de uso y salir. Deja el campo vacio para desactivar un atajo.
 
-> Si usas `Print`/`Shift+Print` y no funcionan, es porque Cinnamon ya los tiene
-> asignados: desactivalos en *Preferencias del sistema > Teclado > Atajos* o usa
-> las combinaciones por defecto.
+> Si `Print`/`ImpPm` no funciona, comprueba que ninguna otra aplicacion o el
+> propio Cinnamon lo esten usando. Tambien puedes desactivarlo en
+> *Preferencias del sistema > Teclado > Atajos* o usar las combinaciones por
+> defecto.
 
 ## Atajos del editor
 Como el visor de imagenes: `Ctrl+O` abrir, `Ctrl+S` guardar, `Ctrl+Shift+S`
 guardar como, `Ctrl+P` imprimir, `Ctrl+W` cerrar, `Ctrl+Z` deshacer,
 `Ctrl+Shift+Z`/`Ctrl+Y` rehacer.
+
+### Memoria y rendimiento
+- El historial de deshacer se limita por numero de pasos y por memoria
+  (192 MB por pila), de modo que editar capturas 4K no dispara el consumo.
+- Al cerrar el editor o una herramienta se liberan las imagenes y se devuelve
+  la memoria retenida al sistema cuando es posible.
+- Los atajos globales esperan eventos de X11 en lugar de consultar el teclado
+  periodicamente: en reposo el consumo de CPU es practicamente nulo.
+- La conversion de imagen a `GdkPixbuf` evita copias intermedias.
 
 `rueda`, `+` o `-`: zoom; `F`: ajustar a ventana; `Ctrl+0`: tamano real (100%);
 `1`: alternar 100%/ajustar; `F11`: pantalla completa; `Alt+flechas`: desplazar;
@@ -257,6 +271,22 @@ python3 -m pytest          # directamente
 
 Dependencias de test: `pip install -r requirements-dev.txt`.
 
+### Categorias de la arena
+
+| Categoria | Marcador | Contenido |
+| --- | --- | --- |
+| Funcionamiento | `func` | captura, editor, herramientas, config, atajos, instancia unica y flujos completos |
+| Estabilidad | `stability` | ciclos de apertura/cierre, presupuesto del historial, memoria, hilos, sockets, servidor HTTP y config corrupta |
+| Seguridad | `security` | aislamiento del servidor de compartir, path traversal, permisos, ejecucion sin shell, secretos y autostart |
+
+```bash
+./arena/run_suites.sh                  # todas las categorias
+./arena/run_suites.sh funcionamiento
+./arena/run_suites.sh estabilidad
+./arena/run_suites.sh seguridad
+./arena/run_arena.sh -m security       # equivalente con pytest directo
+```
+
 O en contenedor:
 
 ```bash
@@ -265,8 +295,8 @@ docker run --rm imagewatcher-arena
 ```
 
 Incluye pruebas de captura y su rendimiento, editor, efectos, render,
-herramientas y overlays, ventana de herramientas, config, atajos y la capa
-de compatibilidad con Wayland.
+herramientas y overlays, ventana de herramientas, config, atajos, la capa
+de compatibilidad con Wayland, estabilidad de recursos y seguridad.
 
 ## Empaquetado
 

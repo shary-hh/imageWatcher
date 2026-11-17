@@ -41,3 +41,23 @@ def test_tray_menu_uses_theme_icon_names():
     assert image is not None
     icon_name = image.get_icon_name()
     assert icon_name
+
+
+def test_pil_to_pixbuf_copies_pixels_into_the_pixbuf():
+    from imagewatcher.gtk_util import pil_to_pixbuf
+
+    image = Image.new("RGBA", (8, 8), (10, 20, 30, 255))
+    pixbuf = pil_to_pixbuf(image)
+    del image
+
+    import gc
+
+    gc.collect()
+    assert pixbuf.get_width() == 8
+    assert bytes(pixbuf.get_pixels()[:4]) == bytes((10, 20, 30, 255))
+
+
+def test_trim_memory_does_not_fail():
+    from imagewatcher.memory import trim_memory
+
+    trim_memory()

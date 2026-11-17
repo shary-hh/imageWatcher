@@ -59,9 +59,24 @@ class Config:
                 base[key] = value
 
     def save(self):
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with open(CONFIG_FILE, "w", encoding="utf-8") as fh:
-            json.dump(self.data, fh, indent=2, ensure_ascii=False)
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        payload = json.dumps(self.data, indent=2, ensure_ascii=False)
+        temp_file = CONFIG_FILE.with_name(CONFIG_FILE.name + ".tmp")
+        descriptor = os.open(
+            temp_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
+        )
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(temp_file, CONFIG_FILE)
+        finally:
+            try:
+                if temp_file.exists():
+                    temp_file.unlink()
+            except OSError:
+                pass
 
     def __getitem__(self, key):
         return self.data[key]

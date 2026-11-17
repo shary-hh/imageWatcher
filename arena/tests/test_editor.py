@@ -35,6 +35,20 @@ def test_annotations_and_undo(editor, pump):
     editor._redo()
 
 
+def test_undo_history_limited_by_memory(editor, monkeypatch):
+    from imagewatcher import editor as editor_module
+
+    # 320x240 RGBA = ~300 KB por copia; con 400 KB solo cabe una.
+    monkeypatch.setattr(editor_module, "UNDO_MAX_BYTES", 400 * 1024)
+    for _ in range(10):
+        editor._push_undo()
+    assert len(editor.undo_stack) == 1
+
+    editor._undo()
+    assert len(editor.undo_stack) == 0
+    assert len(editor.redo_stack) == 1
+
+
 @pytest.mark.parametrize(
     "effect",
     [

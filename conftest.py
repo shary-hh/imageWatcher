@@ -40,3 +40,17 @@ def pump():
         loop.run()
 
     return _pump
+
+
+_CATEGORIA_POR_FICHERO = {
+    "test_stability.py": "stability",
+    "test_security.py": "security",
+}
+
+
+def pytest_collection_modifyitems(config, items):
+    """Clasifica la arena en funcionamiento, estabilidad y seguridad."""
+    for item in items:
+        categoria = _CATEGORIA_POR_FICHERO.get(item.path.name, "func")
+        if not any(marker.name == categoria for marker in item.iter_markers()):
+            item.add_marker(getattr(pytest.mark, categoria))

@@ -32,6 +32,8 @@ FONT_CANDIDATES_BOLD = [
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 ]
 CANVAS_MARGIN = 16
+UNDO_MAX_STEPS = 40
+UNDO_MAX_BYTES = 192 * 1024 * 1024
 
 
 def load_font(size, bold=False):
@@ -368,12 +370,38 @@ class EditorWindow(Gtk.Window):
     def _refresh_pixbuf(self):
         self._pixbuf = pil_to_pixbuf(self.image)
 
+    @staticmethod
+    def _snapshot_bytes(image):
+        """Tamano aproximado en memoria de una copia RGBA."""
+        return image.width * image.height * 4
+
+    def _trim_history(self, stack):
+        """Limita el historial por numero de pasos y por memoria total."""
+        total = sum(self._snapshot_bytes(item) for item in stack)
+        while len(stack) > 1 and (
+            len(stack) > UNDO_MAX_STEPS or total > UNDO_MAX_BYTES
+        ):
+            total -= self._snapshot_bytes(stack.pop(0))
+
     def _push_undo(self):
         self.undo_stack.append(self.image.copy())
-        if len(self.undo_stack) > 40:
-            self.undo_stack.pop(0)
+        self._trim_history(self.undo_stack)
         self.redo_stack.clear()
         self.modified = True
+
+    def release_resources(self):
+        """Suelta las imagenes grandes al cerrar el editor."""
+        self.undo_stack.clear()
+        self.redo_stack.clear()
+        self.original = None
+        self._pixbuf = None
+        image = getattr(self, "image", None)
+        self.image = None
+        if image is not None:
+            try:
+                image.close()
+            except Exception:
+                pass
 
     def _set_image(self, image, refresh_original=False):
         self.image = image.convert("RGBA")
@@ -1106,6 +1134,7 @@ class EditorWindow(Gtk.Window):
             self._status("Nada que deshacer")
             return
         self.redo_stack.append(self.image.copy())
+        self._trim_history(self.redo_stack)
         self._set_image(self.undo_stack.pop())
         self._status("Deshecho")
 
@@ -1114,6 +1143,7 @@ class EditorWindow(Gtk.Window):
             self._status("Nada que rehacer")
             return
         self.undo_stack.append(self.image.copy())
+        self._trim_history(self.undo_stack)
         self._set_image(self.redo_stack.pop())
         self._status("Rehecho")
 

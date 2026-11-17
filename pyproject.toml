@@ -38,3 +38,8 @@ testpaths = ["arena/tests"]
 addopts = "-ra --strict-markers"
 timeout = 60
 filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+    "func: pruebas de funcionamiento (captura, editor, herramientas, configuracion)",
+    "stability: pruebas de estabilidad, recursos y ciclos prolongados",
+    "security: pruebas de seguridad, aislamiento y robustez",
+]

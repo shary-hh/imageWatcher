@@ -55,6 +55,10 @@ def is_kde():
     return bool(desktop_tokens() & {"kde", "plasma"})
 
 
+def is_cinnamon():
+    return any("cinnamon" in token for token in desktop_tokens())
+
+
 def is_sway():
     return (
         "sway" in desktop_tokens()
