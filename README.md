@@ -26,6 +26,8 @@ con Python + GTK3 + Pillow + Xlib.
 - Captura con retardo configurable.
 - Copia automatica al portapapeles y autoguardado opcional.
 - Opcion de incluir el cursor del raton.
+- Opcion de incluir el panel (barra de menu) del escritorio en las capturas de
+  pantalla completa y monitor (`Preferencias > General`).
 
 ### Editor de imagenes
 - Anotaciones: lapiz, rotulador, resaltador, linea, flecha, rectangulo, elipse.
@@ -201,6 +203,14 @@ global directamente. imageWatcher usa los mecanismos estandar disponibles:
 ./install.sh        # instala dependencias, lanzador y entrada de menu
 ```
 
+Si prefieres el paquete `.deb` del sistema, puedes compilarlo e instalarlo con
+un solo comando (pide tu contrasena para `sudo` y reinicia la aplicacion):
+
+```bash
+./install_deb.sh            # compila si hace falta, instala y reinicia
+./install_deb.sh --test     # ademas ejecuta la arena de pruebas (si hay pytest)
+```
+
 O ejecutar directamente sin instalar:
 
 ```bash
@@ -226,9 +236,11 @@ Puedes mover la barra arrastrandola.
 Los atajos se cambian en **Preferencias > Atajos** con el formato
 `modificadores+tecla`, por ejemplo `Print`, `Ctrl+Alt+1` o `Shift+Alt+P`.
 La tecla Impr Pant se puede escribir como `ImpPm`, `Impr Pant`, `PrintScreen`
-o `Print`. El boton **Usar ImpPm para la ventana activa** asigna `Print` a la
-captura de la ventana activa; al guardar, imageWatcher ofrece quitar el atajo
-que Cinnamon usa para sus propias capturas, para que la tecla quede libre.
+o `Print`. Los botones **Usar Impr Pant para toda la pantalla** y **Usar Impr
+Pant para la ventana activa** asignan `Print` a la captura completa (incluye el
+panel y todos los monitores) o a la ventana activa (recorta la ventana, sin
+panel). Al guardar, imageWatcher ofrece quitar el atajo que Cinnamon usa para
+sus propias capturas, para que la tecla quede libre.
 Ademas de las capturas se pueden asignar atajos al editor, grabador,
 herramientas de diseno (color, lupa, regla, punto de mira, transportador,
 pizarra), ocultar superposiciones, mostrar/ocultar la barra, preferencias,

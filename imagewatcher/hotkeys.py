@@ -120,6 +120,22 @@ def parse_hotkey(spec):
     return mods, key_name
 
 
+def assign_print_key(specs, action):
+    """Copia de ``specs`` con Impr Pant asignado a ``action``.
+
+    Quita la tecla sin modificadores de cualquier otra accion: si dos atajos
+    comparten la misma combinacion solo se registra uno y el otro queda muerto.
+    """
+    updated = dict(specs)
+    for name, spec in updated.items():
+        if name == action or not spec:
+            continue
+        if parse_hotkey(spec) == (0, "Print"):
+            updated[name] = ""
+    updated[action] = "Print"
+    return updated
+
+
 def parse_accelerator(spec):
     """Convierte un atajo de Cinnamon ('<Alt>Print') al mismo formato."""
     text = str(spec or "")

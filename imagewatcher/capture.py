@@ -71,6 +71,50 @@ def _monitor_bounds():
     return left, top, right - left, bottom - top
 
 
+def monitor_workareas():
+    """Area util de cada monitor (sin paneles/barras del escritorio)."""
+    display = Gdk.Display.get_default()
+    result = []
+    if display is None:
+        return result
+    for index in range(display.get_n_monitors()):
+        monitor = display.get_monitor(index)
+        if monitor is None:
+            continue
+        area = monitor.get_workarea()
+        result.append(Geometry(area.x, area.y, area.width, area.height))
+    return result
+
+
+def _workarea_bounds():
+    """Rectangulo que contiene las areas utiles de todos los monitores."""
+    workareas = monitor_workareas()
+    if not workareas:
+        return None
+    left = min(area.x for area in workareas)
+    top = min(area.y for area in workareas)
+    right = max(area.x + area.width for area in workareas)
+    bottom = max(area.y + area.height for area in workareas)
+    if right - left <= 0 or bottom - top <= 0:
+        return None
+    return (left, top, right - left, bottom - top)
+
+
+def _crop_to_workarea(image):
+    """Quita de la captura el panel/barras que el escritorio reserva."""
+    box = _workarea_bounds()
+    if box is None:
+        return image
+    left, top, width, height = _logical_to_image(box, image)
+    left = max(0, min(left, image.width - 1))
+    top = max(0, min(top, image.height - 1))
+    right = min(image.width, left + max(1, width))
+    bottom = min(image.height, top + max(1, height))
+    if right <= left or bottom <= top:
+        return image
+    return image.crop((left, top, right, bottom))
+
+
 def virtual_screen_size():
     """Tamano logico del escritorio virtual (todos los monitores)."""
     if is_wayland():
@@ -214,16 +258,23 @@ def image_to_logical_box(box, image):
     )
 
 
-def capture_screen(include_cursor=False):
-    """Captura el escritorio completo (todos los monitores) como PIL RGBA."""
+def capture_screen(include_cursor=False, include_panel=True):
+    """Captura el escritorio completo (todos los monitores) como PIL RGBA.
+
+    Con ``include_panel=False`` recorta el panel/barras del escritorio usando
+    el area util que publica Gdk para cada monitor.
+    """
     if is_wayland():
-        return _wayland_capture(include_cursor=include_cursor)
-    root = Gdk.get_default_root_window()
-    width, height = root.get_width(), root.get_height()
-    pixbuf = Gdk.pixbuf_get_from_window(root, 0, 0, width, height)
-    image = pixbuf_to_pil(pixbuf)
-    if include_cursor:
-        image = _composite_cursor(image, Geometry(0, 0, width, height))
+        image = _wayland_capture(include_cursor=include_cursor)
+    else:
+        root = Gdk.get_default_root_window()
+        width, height = root.get_width(), root.get_height()
+        pixbuf = Gdk.pixbuf_get_from_window(root, 0, 0, width, height)
+        image = pixbuf_to_pil(pixbuf)
+        if include_cursor:
+            image = _composite_cursor(image, Geometry(0, 0, width, height))
+    if not include_panel:
+        image = _crop_to_workarea(image)
     return image
 
 
@@ -289,15 +340,22 @@ def capture_window(include_cursor=False):
     return image
 
 
-def capture_monitor(index):
+def capture_monitor(index, include_panel=True):
     monitors = monitor_geometries()
     if not monitors:
-        return capture_screen()
+        return capture_screen(include_panel=include_panel)
     index = index % len(monitors)
+    box = monitors[index]
+    if not include_panel:
+        workareas = monitor_workareas()
+        if len(workareas) == len(monitors) and workareas[index].width > 0:
+            box = workareas[index]
     if is_wayland():
+        # Se recorta de la captura completa sin recortar para que el mapeo de
+        # coordenadas siga usando los limites de los monitores.
         image = capture_screen()
-        return _crop_logical_box(image, monitors[index].as_tuple())
-    return capture_region(*monitors[index].as_tuple())
+        return _crop_logical_box(image, box.as_tuple())
+    return capture_region(*box.as_tuple())
 
 
 # --------------------------------------------------------------------- scroll

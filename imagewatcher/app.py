@@ -20,6 +20,7 @@ from .config import Config
 from .editor import EditorWindow
 from .hotkeys import (
     HotkeyManager,
+    assign_print_key,
     cinnamon_print_conflicts,
     free_cinnamon_bindings,
 )
@@ -581,14 +582,17 @@ class Application:
                 image = capture.capture_scrolling_window()
                 self.last_capture = {"mode": "scrolling"}
             elif mode == "monitor":
-                image = capture.capture_monitor(0)
+                image = capture.capture_monitor(
+                    0, include_panel=self.config.get("capture_panel", True)
+                )
                 self.last_capture = {"mode": "monitor"}
             elif mode in ("region", "fixed") and rect:
                 base = capture.capture_screen()
                 image = base.crop((rect[0], rect[1], rect[0] + rect[2], rect[1] + rect[3]))
             else:
                 image = capture.capture_screen(
-                    include_cursor=self.config.get("capture_cursor", False)
+                    include_cursor=self.config.get("capture_cursor", False),
+                    include_panel=self.config.get("capture_panel", True),
                 )
                 self.last_capture = {"mode": "fullscreen"}
             self._finish_capture(image)
@@ -1112,6 +1116,17 @@ class PreferencesDialog(Gtk.Dialog):
         self.cursor_check.set_active(self.config.get("capture_cursor", False))
         box.pack_start(self.cursor_check, False, False, 0)
 
+        self.panel_check = Gtk.CheckButton(
+            label="Incluir el panel (barra de menu) del escritorio"
+        )
+        self.panel_check.set_active(self.config.get("capture_panel", True))
+        self.panel_check.set_tooltip_text(
+            "Se aplica a Pantalla completa y Monitor principal. Si lo desactivas, "
+            "esas capturas recortan la barra del escritorio. La ventana activa y "
+            "la seleccion manual de region no cambian."
+        )
+        box.pack_start(self.panel_check, False, False, 0)
+
         self.show_bar_check = Gtk.CheckButton(label="Mostrar la barra de captura")
         self.show_bar_check.set_active(self.config.get("show_capture_bar", True))
         self.show_bar_check.set_tooltip_text(
@@ -1220,13 +1235,28 @@ class PreferencesDialog(Gtk.Dialog):
             0,
         )
 
-        self.print_button = Gtk.Button(label="Usar ImpPm para la ventana activa")
-        self.print_button.set_tooltip_text(
-            "Asigna la tecla ImpPm (Print) a 'Ventana activa'. Al guardar, "
-            "imageWatcher pedira permiso para quitar ese atajo a Cinnamon."
+        print_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.print_full_button = Gtk.Button(
+            label="Usar Impr Pant para toda la pantalla"
         )
-        self.print_button.connect("clicked", self._use_print_for_window)
-        box.pack_start(self.print_button, False, False, 0)
+        self.print_full_button.set_tooltip_text(
+            "Asigna la tecla Impr Pant (Print) a 'Pantalla completa', incluyendo "
+            "el panel y todos los monitores. Al guardar, imageWatcher pedira "
+            "permiso para quitar ese atajo a Cinnamon."
+        )
+        self.print_full_button.connect("clicked", self._use_print_for, "fullscreen")
+        print_box.pack_start(self.print_full_button, False, False, 0)
+
+        self.print_window_button = Gtk.Button(
+            label="Usar Impr Pant para la ventana activa"
+        )
+        self.print_window_button.set_tooltip_text(
+            "Asigna la tecla Impr Pant (Print) a 'Ventana activa'. La captura "
+            "recorta la ventana, sin el panel ni el resto del escritorio."
+        )
+        self.print_window_button.connect("clicked", self._use_print_for, "window")
+        print_box.pack_start(self.print_window_button, False, False, 0)
+        box.pack_start(print_box, False, False, 0)
 
         if session.is_wayland():
             box.pack_start(
@@ -1273,11 +1303,16 @@ class PreferencesDialog(Gtk.Dialog):
         box.pack_start(scroller, True, True, 0)
         return box
 
-    def _use_print_for_window(self, _button=None):
-        entry = self.hotkey_entries.get("window")
-        if entry is None:
+    def _use_print_for(self, _button=None, action="fullscreen"):
+        if not self.hotkey_entries or action not in self.hotkey_entries:
             return
-        entry.set_text("Print")
+        updated = assign_print_key(
+            {name: entry.get_text() for name, entry in self.hotkey_entries.items()},
+            action,
+        )
+        for name, spec in updated.items():
+            self.hotkey_entries[name].set_text(spec)
+        entry = self.hotkey_entries[action]
         entry.set_position(-1)
         entry.grab_focus()
 
@@ -1340,6 +1375,7 @@ class PreferencesDialog(Gtk.Dialog):
         self.config["open_editor"] = self.open_editor_check.get_active()
         self.config["copy_to_clipboard"] = self.clipboard_check.get_active()
         self.config["capture_cursor"] = self.cursor_check.get_active()
+        self.config["capture_panel"] = self.panel_check.get_active()
         self.config["show_capture_bar"] = self.show_bar_check.get_active()
         self.config["snap_enabled"] = self.snap_check.get_active()
         self.config["color_zoom"] = int(self.color_zoom_spin.get_value())

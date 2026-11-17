@@ -39,6 +39,30 @@ def test_parse_cinnamon_accelerator():
     assert parse_accelerator("<Control><Shift>Print") == (0x0004 | 0x0001, "Print")
 
 
+def test_assign_print_key_moves_between_actions():
+    from imagewatcher.hotkeys import assign_print_key
+
+    specs = {"fullscreen": "Ctrl+Alt+1", "window": "Print", "region": "Ctrl+Alt+2"}
+    updated = assign_print_key(specs, "fullscreen")
+    assert updated["fullscreen"] == "Print"
+    assert updated["window"] == ""
+    assert updated["region"] == "Ctrl+Alt+2"
+    # No muta el diccionario original.
+    assert specs["window"] == "Print"
+
+
+def test_assign_print_key_keeps_modified_variants():
+    from imagewatcher.hotkeys import assign_print_key
+
+    specs = {"fullscreen": "", "window": "", "region": "Shift+Print"}
+    updated = assign_print_key(specs, "fullscreen")
+    assert updated == {
+        "fullscreen": "Print",
+        "window": "",
+        "region": "Shift+Print",
+    }
+
+
 def test_cinnamon_conflicts_only_apply_to_cinnamon(monkeypatch):
     from imagewatcher import hotkeys as hotkeys_module
 

@@ -28,6 +28,47 @@ def test_monitor_geometries():
     assert all(monitor.width > 0 and monitor.height > 0 for monitor in monitors)
 
 
+def _workarea_size():
+    areas = capture.monitor_workareas()
+    if not areas:
+        return None
+    left = min(area.x for area in areas)
+    top = min(area.y for area in areas)
+    right = max(area.x + area.width for area in areas)
+    bottom = max(area.y + area.height for area in areas)
+    return (right - left, bottom - top)
+
+
+def test_capture_screen_can_exclude_desktop_panel():
+    """La preferencia 'incluir panel' debe poder recortar la barra inferior."""
+    full = capture.capture_screen(include_panel=True)
+    cropped = capture.capture_screen(include_panel=False)
+    assert cropped.width > 0 and cropped.height > 0
+    assert cropped.width <= full.width
+    assert cropped.height <= full.height
+    if not capture.is_wayland():
+        assert full.size == capture.virtual_screen_size()
+        expected = _workarea_size()
+        if expected is not None:
+            assert cropped.size == expected
+
+
+def test_capture_monitor_can_exclude_desktop_panel():
+    full = capture.capture_monitor(0, include_panel=True)
+    cropped = capture.capture_monitor(0, include_panel=False)
+    assert full.width > 0 and full.height > 0
+    assert cropped.width > 0 and cropped.height > 0
+    assert cropped.width <= full.width
+    assert cropped.height <= full.height
+    areas = capture.monitor_workareas()
+    if (
+        not capture.is_wayland()
+        and len(areas) == 1
+        and len(capture.monitor_geometries()) == 1
+    ):
+        assert cropped.size == (areas[0].width, areas[0].height)
+
+
 def test_capture_region_from_base():
     base = capture.capture_screen()
     region = capture.capture_region(10, 10, 120, 80, base=base)

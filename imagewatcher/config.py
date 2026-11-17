@@ -17,6 +17,7 @@ DEFAULTS = {
     "copy_to_clipboard": True,
     "open_editor": True,
     "capture_cursor": False,
+    "capture_panel": True,
     "show_capture_bar": True,
     "snap_enabled": True,
     "delay_seconds": 3,
