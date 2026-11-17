@@ -6,4 +6,5 @@ Exec=imagewatcher
 Icon=accessories-screenshot
 Terminal=false
 Categories=Utility;Graphics;
+StartupWMClass=imageWatcher
 Keywords=captura;screenshot;editor;pantalla;

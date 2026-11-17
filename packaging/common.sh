@@ -41,6 +41,7 @@ Exec=$PKG_NAME
 Icon=$PKG_NAME
 Terminal=false
 Categories=Graphics;
+StartupWMClass=imageWatcher
 Keywords=captura;screenshot;editor;pantalla;
 EOF
 }

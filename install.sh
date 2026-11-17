@@ -53,6 +53,7 @@ Path=$DIR
 Icon=accessories-screenshot
 Terminal=false
 Categories=Utility;Graphics;
+StartupWMClass=imageWatcher
 Keywords=captura;screenshot;editor;
 EOF
 chmod +x "$DESKTOP"

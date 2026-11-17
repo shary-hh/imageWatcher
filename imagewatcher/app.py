@@ -21,6 +21,7 @@ from .editor import EditorWindow
 from .hotkeys import HotkeyManager
 from .recorder import open_recorder
 from .region import RegionSelector, ask_fixed_size, extract_freehand
+from .single_instance import SingleInstance
 from .tools import color_picker, whiteboard
 from .tools.overlay import OPEN_OVERLAY_MODES, DesktopOverlay
 from .welcome import WelcomeWindow
@@ -1024,6 +1025,23 @@ class Application:
         dialog.run()
         dialog.destroy()
 
+    def present(self):
+        """Muestra la instancia existente cuando se vuelve a abrir la app."""
+        self._set_bar_visible(True, force=True)
+        for window in list(self.editors) + list(self.tool_windows.values()):
+            try:
+                if window.get_visible():
+                    window.present()
+            except Exception:
+                pass
+        existing = getattr(self, "_welcome", None)
+        if existing is not None:
+            try:
+                if existing.get_visible():
+                    existing.present()
+            except Exception:
+                pass
+
     def quit(self):
         self.config.save()
         self.hotkeys.stop()
@@ -1354,13 +1372,20 @@ def main():
     if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
         logger.error("Se requiere una sesion grafica X11 o Wayland.")
         return 1
+    instance = SingleInstance()
+    if not instance.acquire():
+        logger.info("imageWatcher ya esta abierto: mostrando la instancia existente.")
+        return 0
     app = Application()
+    instance.set_callback(lambda _action: app.present())
     if app.config.get("show_welcome", True):
         app.show_welcome()
     try:
         Gtk.main()
     except KeyboardInterrupt:
         app.quit()
+    finally:
+        instance.close()
     return 0
 
 
