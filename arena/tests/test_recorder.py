@@ -136,7 +136,7 @@ def test_gif_format_records_temp_video_and_disables_audio(monkeypatch):
     monkeypatch.setattr(recorder_module, "has_encoder", lambda _name: True)
 
     recorder = _recorder()
-    recorder.region = Image.new("RGBA", (320, 200))
+    recorder.region = Image.new("RGBA", (720, 153))
     recorder.region_offset = (10, 20)
     recorder.audio_check.set_active(True)
     try:
@@ -151,6 +151,8 @@ def test_gif_format_records_temp_video_and_disables_audio(monkeypatch):
         assert recorder._temp_path.endswith(".mp4")
         assert cmd[-1] == recorder._temp_path
         assert "pulse" not in cmd
+        # Las regiones impares no pueden codificarse como yuv420p.
+        assert "crop=trunc(iw/2)*2:trunc(ih/2)*2" in cmd
 
         recorder.format_combo.set_active_id("mp4")
         assert not recorder._is_gif()
@@ -161,6 +163,30 @@ def test_gif_format_records_temp_video_and_disables_audio(monkeypatch):
         assert "15" not in (recorder.fps_spin.get_tooltip_text() or "")
     finally:
         recorder.destroy()
+
+
+def test_recording_failure_is_reported_from_ffmpeg_stderr():
+    import io
+
+    recorder = _recorder()
+    recorder.process = type("_Proc", (), {"poll": lambda self: 1})()
+    recorder._stderr_file = io.BytesIO(
+        b"[libx264] height not divisible by 2 (720x153)\nConversion failed!\n"
+    )
+    try:
+        assert recorder._tick() is False
+        assert "height not divisible" in recorder.status.get_text()
+        assert recorder.process is None
+    finally:
+        recorder._close_stderr()
+        recorder.destroy()
+
+
+def test_video_to_gif_rejects_empty_input(tmp_path):
+    empty = tmp_path / "vacio.mp4"
+    empty.write_bytes(b"")
+    with pytest.raises(RuntimeError, match="vacio"):
+        video_to_gif(str(empty), str(tmp_path / "salida.gif"))
 
 
 def test_video_to_gif_generates_animated_gif(tmp_path):

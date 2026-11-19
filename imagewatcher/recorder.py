@@ -4,6 +4,7 @@ import re
 import shutil
 import signal
 import subprocess
+import tempfile
 import threading
 import time
 
@@ -57,6 +58,8 @@ def video_to_gif(video_path, gif_path, fps=GIF_MAX_FPS):
     ffmpeg = ffmpeg_path()
     if not ffmpeg:
         raise RuntimeError("ffmpeg no esta instalado")
+    if not os.path.isfile(video_path) or os.path.getsize(video_path) == 0:
+        raise RuntimeError("el video temporal esta vacio")
     fps = max(1, min(int(fps), GIF_MAX_FPS))
     palette = gif_path + ".palette.png"
     filters = f"fps={fps},scale='min({GIF_MAX_WIDTH},iw)':-1:flags=lanczos"
@@ -196,6 +199,7 @@ class RecorderWindow(Gtk.Window):
         self._temp_path = None
         self._converting = False
         self._audio_available = False
+        self._stderr_file = None
         self.set_default_size(440, 300)
         subtitle = {
             "x11": "Video con ffmpeg",
@@ -438,6 +442,9 @@ class RecorderWindow(Gtk.Window):
         ]
         if self.region_geometry:
             x, y, width, height = self.region_geometry
+            # yuv420p necesita dimensiones pares (wf-recorder no tiene filtros).
+            width = max(2, width - width % 2)
+            height = max(2, height - height % 2)
             cmd += ["-g", f"{x},{y} {width}x{height}"]
         if self.audio_check.get_active() and not self._is_gif():
             sinks = capture.list_audio_sinks()
@@ -477,10 +484,15 @@ class RecorderWindow(Gtk.Window):
         cmd = [
             ffmpeg_path(),
             "-y",
+            "-hide_banner",
+            "-loglevel", "error",
             "-f", "x11grab",
             "-framerate", str(fps),
             "-video_size", size,
             "-i", grab_input,
+            # libx264/mpeg4 con yuv420p exigen dimensiones pares; la region
+            # elegida puede medir un numero impar de pixeles.
+            "-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2",
         ]
         if self.audio_check.get_active() and not self._is_gif():
             sinks = capture.list_audio_sinks()
@@ -534,6 +546,33 @@ class RecorderWindow(Gtk.Window):
     def _target_fps(self):
         fps = int(self.fps_spin.get_value())
         return min(fps, GIF_MAX_FPS) if self._is_gif() else fps
+
+    def _close_stderr(self):
+        if self._stderr_file is not None:
+            try:
+                self._stderr_file.close()
+            except Exception:
+                pass
+            self._stderr_file = None
+
+    def _process_error(self):
+        """Ultima linea util del stderr de ffmpeg/wf-recorder."""
+        if self._stderr_file is None:
+            return ""
+        try:
+            self._stderr_file.seek(0)
+            text = self._stderr_file.read().decode("utf-8", "replace")
+        except Exception:
+            return ""
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        for line in lines:
+            lower = line.lower()
+            if any(
+                word in lower
+                for word in ("error", "invalid", "divisible", "failed", "unable")
+            ):
+                return line[:240]
+        return lines[-1][:240] if lines else ""
 
     def _on_countdown_changed(self, spin):
         self.config["record_countdown"] = int(spin.get_value())
@@ -662,10 +701,16 @@ class RecorderWindow(Gtk.Window):
             self.format_combo.set_sensitive(True)
             return
         try:
+            self._close_stderr()
+            self._stderr_file = tempfile.TemporaryFile()
             self.process = subprocess.Popen(
-                cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=self._stderr_file,
             )
         except Exception as exc:
+            self._close_stderr()
             self.status.set_text(f"Error: {exc}")
             self.start_btn.set_sensitive(self._can_start())
             self.stop_btn.set_sensitive(False)
@@ -739,6 +784,29 @@ class RecorderWindow(Gtk.Window):
         self._timer = GLib.timeout_add(500, self._tick)
 
     def _tick(self):
+        if self.process is not None:
+            code = self.process.poll()
+            if code is not None:
+                error = self._process_error()
+                self._close_stderr()
+                self.process = None
+                self._timer = None
+                partial = self._temp_path or self.output_path
+                self._temp_path = None
+                if partial:
+                    try:
+                        os.remove(partial)
+                    except OSError:
+                        pass
+                self.start_btn.set_sensitive(self._can_start())
+                self.stop_btn.set_sensitive(False)
+                self.format_combo.set_sensitive(True)
+                self.status.set_text(
+                    f"Error al grabar: {error}"
+                    if error
+                    else "ffmpeg termino antes de tiempo"
+                )
+                return False
         if not self.process and not self._gnome_screencast:
             self._timer = None
             return False
@@ -786,10 +854,30 @@ class RecorderWindow(Gtk.Window):
             except Exception:
                 try:
                     self.process.terminate()
+                    self.process.wait(timeout=2)
                 except Exception:
                     pass
+            code = self.process.poll()
+            error = ""
+            # SIGINT es la parada normal de wf-recorder.
+            if code not in (0, None) and not self._stop_signal:
+                error = self._process_error() or f"ffmpeg termino con codigo {code}"
+            self._close_stderr()
             self.process = None
             stopped = True
+            if error:
+                partial = self._temp_path or self.output_path
+                self._temp_path = None
+                if partial:
+                    try:
+                        os.remove(partial)
+                    except OSError:
+                        pass
+                self.start_btn.set_sensitive(self._can_start())
+                self.stop_btn.set_sensitive(False)
+                self.format_combo.set_sensitive(True)
+                self.status.set_text(f"Error al grabar: {error}")
+                return
         if not stopped:
             return
         self.start_btn.set_sensitive(self._can_start())
