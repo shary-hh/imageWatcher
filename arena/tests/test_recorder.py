@@ -189,6 +189,22 @@ def test_video_to_gif_rejects_empty_input(tmp_path):
         video_to_gif(str(empty), str(tmp_path / "salida.gif"))
 
 
+def test_start_with_region_uses_the_editable_overlay():
+    recorder = _recorder()
+    recorder._can_start = lambda: True
+    recorder.region = Image.new("RGBA", (200, 100))
+    recorder.countdown_spin.set_value(4)
+    calls = []
+    recorder._begin_region_countdown = lambda seconds: calls.append(("region", seconds))
+    recorder._begin_countdown = lambda seconds: calls.append(("count", seconds))
+    recorder._start_recording = lambda: calls.append(("record",))
+    try:
+        recorder._start()
+        assert calls == [("region", 4)]
+    finally:
+        recorder.destroy()
+
+
 def test_initial_region_rect_uses_current_selection():
     recorder = _recorder()
     base = Image.new("RGBA", (800, 600))

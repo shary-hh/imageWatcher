@@ -120,7 +120,8 @@ class RegionSelector(Gtk.Window):
 
     def __init__(self, base_image, on_done, on_cancel=None, detect_windows=True,
                  fixed_size=None, freehand=False, initial_rect=None,
-                 snap_enabled=True, preview_size=None):
+                 snap_enabled=True, preview_size=None, countdown_seconds=0,
+                 action_label="capturar", allow_freehand=True):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.source = base_image
         if preview_size and tuple(int(v) for v in preview_size) != base_image.size:
@@ -158,6 +159,11 @@ class RegionSelector(Gtk.Window):
             self.fixed_size = None
         self.freehand_mode = bool(freehand)
         self._freehand_points = []
+        self.countdown_seconds = max(0, int(countdown_seconds or 0))
+        self.countdown_remaining = self.countdown_seconds
+        self._countdown_source = None
+        self.action_label = action_label
+        self.allow_freehand = bool(allow_freehand)
 
         self.rect = None            # (x, y, w, h) confirmada o en edicion
         self.mode = None            # creating | moving | resizing | freehand
@@ -220,6 +226,8 @@ class RegionSelector(Gtk.Window):
             self.fullscreen()
         self.present()
         GLib.timeout_add(50, self._grab)
+        if self.countdown_seconds:
+            self._countdown_source = GLib.timeout_add(1000, self._countdown_tick)
 
     @staticmethod
     def _preview_is_wayland():
@@ -255,6 +263,8 @@ class RegionSelector(Gtk.Window):
             self._finish_cancel()
             return True
         if event.keyval in (Gdk.KEY_l, Gdk.KEY_L) and not self.fixed_size:
+            if not self.allow_freehand:
+                return True
             self.freehand_mode = not self.freehand_mode
             self.rect = None
             self._freehand_points = []
@@ -392,10 +402,36 @@ class RegionSelector(Gtk.Window):
         return True
 
     def _on_destroy(self, _widget):
+        self._stop_countdown()
         if self.on_cancel:
             callback, self.on_cancel = self.on_cancel, None
             callback()
             self.on_done = None
+
+    def _stop_countdown(self):
+        if self._countdown_source is not None:
+            try:
+                GLib.source_remove(self._countdown_source)
+            except Exception:
+                pass
+            self._countdown_source = None
+
+    def _countdown_tick(self):
+        if self.mode is not None:
+            # No empezar a grabar en mitad de un arrastre.
+            self.area.queue_draw()
+            return True
+        if self.countdown_remaining > 0:
+            self.countdown_remaining -= 1
+        if self.countdown_remaining <= 0:
+            self._countdown_source = None
+            if self.rect:
+                self._finish_accept(self.rect)
+            else:
+                self._finish_cancel()
+            return False
+        self.area.queue_draw()
+        return True
 
     # ------------------------------------------------------------------ snapping
     def _snap_point(self, point):
@@ -533,6 +569,7 @@ class RegionSelector(Gtk.Window):
             return None
 
     def _complete(self, image):
+        self._stop_countdown()
         self.on_cancel = None
         callback = self.on_done
         self.on_done = None
@@ -574,6 +611,7 @@ class RegionSelector(Gtk.Window):
         self._complete(image)
 
     def _finish_cancel(self):
+        self._stop_countdown()
         self.on_done = None
         self.destroy()
 
@@ -609,20 +647,22 @@ class RegionSelector(Gtk.Window):
                 self._draw_hint(cr, "Mueve el raton y haz clic para capturar   Esc: cancelar")
             elif self.rect:
                 magnet = "M: sin iman" if self.snap_enabled else "M: iman"
-                self._draw_hint(
-                    cr,
-                    "Mover/redimensionar   Enter: capturar   L: lazo   "
-                    f"{magnet}   Esc: cancelar",
-                )
+                parts = ["Mover/redimensionar", f"Enter: {self.action_label}"]
+                if self.allow_freehand:
+                    parts.append("L: lazo")
+                parts.extend([magnet, "Esc: cancelar"])
+                self._draw_hint(cr, "   ".join(parts))
         else:
             cr.set_source_rgba(0, 0, 0, 0.25)
             cr.paint()
             if not self.mode:
                 magnet = "M: sin iman" if self.snap_enabled else "M: iman"
-                self._draw_hint(
-                    cr,
-                    f"Arrastra para seleccionar   L: lazo   {magnet}   Esc: cancelar",
-                )
+                parts = ["Arrastra para seleccionar"]
+                if self.allow_freehand:
+                    parts.append("L: lazo")
+                parts.extend([magnet, "Esc: cancelar"])
+                self._draw_hint(cr, "   ".join(parts))
+        self._draw_countdown(cr)
         return False
 
     def _draw_freehand(self, cr):
@@ -691,6 +731,27 @@ class RegionSelector(Gtk.Window):
         cr.fill()
         cr.set_source_rgb(1, 1, 1)
         cr.move_to(x, y)
+        cr.show_text(text)
+
+    def _draw_countdown(self, cr):
+        if not self.countdown_seconds or self.countdown_remaining <= 0:
+            return
+        text = str(self.countdown_remaining)
+        cr.select_font_face("DejaVu Sans Mono", 0, 1)
+        cr.set_font_size(56)
+        extents = cr.text_extents(text)
+        cx = self.base.width / 2
+        top = 110
+        cr.set_source_rgba(0, 0, 0, 0.68)
+        cr.rectangle(
+            cx - extents.width / 2 - 22,
+            top - extents.height - 16,
+            extents.width + 44,
+            extents.height + 32,
+        )
+        cr.fill()
+        cr.set_source_rgb(1, 1, 1)
+        cr.move_to(cx - extents.width / 2, top)
         cr.show_text(text)
 
 

@@ -139,6 +139,59 @@ def test_region_initial_rect_can_be_moved_and_resized(pump):
         selector.destroy()
 
 
+def test_region_countdown_accepts_the_current_rect(pump):
+    from gi.repository import GLib
+
+    captured = {}
+
+    def done(image):
+        captured["image"] = image
+
+    selector = RegionSelector(
+        Image.new("RGBA", (800, 600), (0, 0, 0, 255)),
+        done,
+        initial_rect=(100, 80, 300, 200),
+        countdown_seconds=2,
+        action_label="grabar",
+        allow_freehand=False,
+    )
+    try:
+        pump(120)
+        GLib.source_remove(selector._countdown_source)
+        selector._countdown_source = None
+        assert selector.countdown_remaining == 2
+        assert selector._countdown_tick() is True
+        assert selector.countdown_remaining == 1
+        assert selector._countdown_tick() is False
+        assert captured["image"].size == (300, 200)
+    finally:
+        if "image" not in captured:
+            selector.destroy()
+
+
+def test_region_countdown_pauses_while_dragging(pump):
+    from gi.repository import GLib
+
+    selector = RegionSelector(
+        Image.new("RGBA", (800, 600), (0, 0, 0, 255)),
+        lambda image: None,
+        initial_rect=(100, 80, 300, 200),
+        countdown_seconds=2,
+    )
+    try:
+        pump(120)
+        GLib.source_remove(selector._countdown_source)
+        selector._countdown_source = None
+        selector.mode = "moving"
+        assert selector._countdown_tick() is True
+        assert selector.countdown_remaining == 2
+        selector.mode = None
+        assert selector._countdown_tick() is True
+        assert selector.countdown_remaining == 1
+    finally:
+        selector.destroy()
+
+
 def test_region_handle_detection(pump):
     selector = _selector(pump)
     try:

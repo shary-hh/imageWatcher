@@ -200,6 +200,8 @@ class RecorderWindow(Gtk.Window):
         self._converting = False
         self._audio_available = False
         self._stderr_file = None
+        self._region_selector = None
+        self._closing = False
         self.set_default_size(440, 300)
         subtitle = {
             "x11": "Video con ffmpeg",
@@ -298,7 +300,7 @@ class RecorderWindow(Gtk.Window):
         self.status = Gtk.Label(label="Listo", xalign=0)
         root.pack_start(self.status, False, False, 0)
 
-        self.connect("destroy", lambda *_: self._stop())
+        self.connect("destroy", self._on_destroy)
         self.connect("key-press-event", self._on_key)
         self.show_all()
 
@@ -331,6 +333,10 @@ class RecorderWindow(Gtk.Window):
             self.toggle_recording()
             return True
         return False
+
+    def _on_destroy(self, *_):
+        self._closing = True
+        self._stop()
 
     def _initial_region_rect(self, base):
         """Rectangulo inicial para reeditar la region (coordenadas del selector)."""
@@ -635,6 +641,7 @@ class RecorderWindow(Gtk.Window):
             or self.process is not None
             or self._gnome_screencast
             or self._converting
+            or self._region_selector is not None
         )
 
     def toggle_recording(self):
@@ -642,6 +649,9 @@ class RecorderWindow(Gtk.Window):
         if self._converting:
             self.present()
             self.status.set_text("Generando GIF...")
+            return
+        if self._region_selector is not None:
+            self._stop()
             return
         if self.is_busy():
             self._stop()
@@ -675,6 +685,62 @@ class RecorderWindow(Gtk.Window):
         self._set_timer_text(str(remaining), countdown=True)
         self._show_countdown_overlay()
         self.status.set_text(f"La grabacion empieza en {remaining} s...")
+
+    def _begin_region_countdown(self, seconds):
+        """Overlay editable de la region con la cuenta regresiva integrada."""
+        try:
+            self.hide()
+            base = capture.capture_screen()
+        except Exception as exc:
+            self.present()
+            self.status.set_text(f"No se pudo capturar la pantalla: {exc}")
+            return
+        from .region import RegionSelector
+
+        holder = {}
+
+        def finished(image):
+            self._region_selector = None
+            self.region = image
+            self.region_offset = holder.get(
+                "rect", (0, 0, image.width, image.height)
+            )[:2]
+            self.area_label.set_text(f"Region {image.width}x{image.height}")
+            self.pick_button.set_label("Ajustar region...")
+            self._start_recording()
+            if not self.is_busy():
+                self.present()
+
+        def cancelled():
+            self._region_selector = None
+            self.start_btn.set_sensitive(self._can_start())
+            self.stop_btn.set_sensitive(False)
+            self.format_combo.set_sensitive(True)
+            if not self._closing:
+                self.present()
+                self.status.set_text("Grabacion cancelada")
+
+        selector = RegionSelector(
+            base,
+            finished,
+            on_cancel=cancelled,
+            detect_windows=False,
+            initial_rect=self._initial_region_rect(base),
+            countdown_seconds=seconds,
+            action_label="grabar",
+            allow_freehand=False,
+        )
+        self._region_selector = selector
+        original_accept = selector._finish_accept
+
+        def accept(rect):
+            holder["rect"] = rect
+            original_accept(rect)
+
+        selector._finish_accept = accept
+        self.start_btn.set_sensitive(False)
+        self.stop_btn.set_sensitive(True)
+        self.format_combo.set_sensitive(False)
 
     def _begin_countdown(self, seconds):
         self._countdown_remaining = int(seconds)
@@ -715,12 +781,17 @@ class RecorderWindow(Gtk.Window):
     def _start(self):
         if self._countdown_timer is not None or self._converting:
             return
+        if self._region_selector is not None:
+            return
         if not self._can_start():
             self.status.set_text("No se puede iniciar la grabacion")
             return
         self._save_countdown()
         seconds = int(self.countdown_spin.get_value())
-        if seconds > 0:
+        if self.region is not None:
+            # Deja ajustar la region (mover/redimensionar) antes de grabar.
+            self._begin_region_countdown(seconds)
+        elif seconds > 0:
             self._begin_countdown(seconds)
         else:
             self._start_recording()
@@ -859,6 +930,11 @@ class RecorderWindow(Gtk.Window):
             self.status.set_text("Grabacion cancelada")
             return
         if self._converting:
+            return
+        if self._region_selector is not None:
+            selector = self._region_selector
+            self._region_selector = None
+            selector.destroy()
             return
         if self._timer:
             GLib.source_remove(self._timer)

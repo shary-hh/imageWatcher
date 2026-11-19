@@ -76,6 +76,9 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 - X11: pantalla completa o region seleccionada, con `ffmpeg` (x11grab). La
   region se puede mover y redimensionar antes de grabar, y se conserva al
   volver a pulsar **Ajustar region...**.
+- Al iniciar una grabacion con region, el area vuelve a mostrarse con sus
+  tiradores y la cuenta regresiva: se puede mover/redimensionar, **Enter**
+  empieza a grabar ya y **Esc** cancela.
 - Wayland/wlroots: pantalla completa o region con `wf-recorder` (y `slurp`
   para elegir la region).
 - Wayland/GNOME: grabacion de pantalla completa con la API de GNOME Shell.
