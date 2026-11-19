@@ -79,6 +79,8 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 - Wayland/GNOME: grabacion de pantalla completa con la API de GNOME Shell.
 - Cuenta regresiva configurable antes de empezar (0-30 s), que se muestra a
   pantalla completa.
+- Salida en **MP4** o **GIF animado**. El GIF no incluye audio y se limita a
+  15 FPS, ideal para compartir una region corta.
 - Atajo global `Ctrl+Alt+R` para iniciar o detener la grabacion sin abrir la
   ventana del grabador.
 - FPS ajustable y audio del sistema opcional (segun el backend).
@@ -113,6 +115,7 @@ Leyenda: ✅ implementado · ◐ parcial · ✗ requiere servicio externo/cuenta
 | Captura | Multiples monitores | ✅ |
 | Grabacion | Pantalla completa / region + audio del sistema | ✅ |
 | Grabacion | Cuenta regresiva configurable antes de grabar | ✅ |
+| Grabacion | Exportar a GIF animado | ✅ |
 | Grabacion | Ventana / microfono | ◐ |
 | Editor | Lapiz, pincel, rotulador, resaltador | ✅ |
 | Editor | Aerografo, caligrafia | ✅ |

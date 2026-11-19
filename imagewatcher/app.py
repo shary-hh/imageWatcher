@@ -1380,6 +1380,21 @@ class PreferencesDialog(Gtk.Dialog):
         box.pack_start(row, False, False, 0)
 
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        row.pack_start(Gtk.Label(label="Formato:"), False, False, 0)
+        self.record_format_combo = Gtk.ComboBoxText()
+        self.record_format_combo.append("mp4", "MP4 (video)")
+        self.record_format_combo.append("gif", "GIF (animacion)")
+        active_format = self.config.get("record_format", "mp4")
+        self.record_format_combo.set_active_id(
+            active_format if active_format in ("mp4", "gif") else "mp4"
+        )
+        self.record_format_combo.set_tooltip_text(
+            "GIF no incluye audio y se graba a un maximo de 15 FPS."
+        )
+        row.pack_start(self.record_format_combo, False, False, 0)
+        box.pack_start(row, False, False, 0)
+
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         row.pack_start(Gtk.Label(label="Cuenta regresiva (s):"), False, False, 0)
         adj = Gtk.Adjustment(
             value=self.config.get("record_countdown", 3), lower=0, upper=30, step_increment=1
@@ -1420,6 +1435,9 @@ class PreferencesDialog(Gtk.Dialog):
         self.config["record_fps"] = int(self.fps_spin.get_value())
         self.config["record_audio"] = self.audio_check.get_active()
         self.config["record_countdown"] = int(self.record_countdown_spin.get_value())
+        self.config["record_format"] = (
+            self.record_format_combo.get_active_id() or "mp4"
+        )
         self.config["favorite_tools"] = [
             tool_id
             for tool_id, _label, _kind in FAVORITE_TOOLS

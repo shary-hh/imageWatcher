@@ -15,7 +15,7 @@ SECTIONS = [
             "Pantalla: captura todos los monitores.",
             "Ventana: captura la ventana activa.",
             "Region: arrastra para seleccionar; Enter confirma y Esc cancela.",
-            "Grabar: graba video de pantalla con ffmpeg (cuenta regresiva a pantalla completa).",
+            "Grabar: video MP4 o GIF animado de una region de la pantalla.",
         ],
     ),
     (

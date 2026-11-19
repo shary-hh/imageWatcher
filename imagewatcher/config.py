@@ -33,6 +33,7 @@ DEFAULTS = {
     "record_fps": 25,
     "record_audio": False,
     "record_countdown": 3,
+    "record_format": "mp4",
     "theme": "system",
     "show_welcome": True,
 }
