@@ -28,7 +28,7 @@ class _Config:
 
 
 def _recorder():
-    return RecorderWindow(_Config())
+    return RecorderWindow(_Config(), countdown_overlay=False)
 
 
 def test_recorder_countdown_starts_recording():
@@ -67,5 +67,57 @@ def test_recorder_countdown_can_be_cancelled():
         assert recorder._countdown_timer is None
         assert "cancelada" in recorder.status.get_text()
         assert recorder.start_btn.get_sensitive()
+    finally:
+        recorder.destroy()
+
+
+def test_countdown_updates_fullscreen_overlay():
+    recorder = _recorder()
+
+    class _Overlay:
+        def __init__(self):
+            self.value = None
+            self.destroyed = False
+
+        def set_remaining(self, value):
+            self.value = value
+
+        def destroy(self):
+            self.destroyed = True
+
+    overlay = _Overlay()
+    recorder.countdown_overlay_enabled = True
+    recorder._countdown_overlay = overlay
+    recorder._countdown_remaining = 4
+    try:
+        recorder._show_countdown()
+        assert overlay.value == 4
+        recorder._hide_countdown_overlay()
+        assert overlay.destroyed
+        assert recorder._countdown_overlay is None
+    finally:
+        recorder.destroy()
+
+
+def test_toggle_recording_starts_and_stops():
+    recorder = _recorder()
+    recorder._can_start = lambda: True
+    calls = []
+
+    def start():
+        calls.append("start")
+        recorder.process = object()  # la grabacion ya esta en marcha
+
+    recorder._start = start
+    recorder._stop = lambda: calls.append("stop")
+    recorder.present = lambda: calls.append("present")
+    try:
+        recorder.toggle_recording()
+        assert calls == ["start"]
+
+        recorder.process = object()  # simula una grabacion activa
+        recorder.toggle_recording()
+        assert calls == ["start", "stop", "present"]
+        recorder.process = None
     finally:
         recorder.destroy()

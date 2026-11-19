@@ -17,7 +17,8 @@ HOTKEY_ACTIONS = [
     ("repeat", "Repetir ultima captura", "Captura", "Ctrl+Alt+4"),
     # Editor y herramientas
     ("editor", "Editor de imagenes", "Editor y herramientas", ""),
-    ("recorder", "Grabador de pantalla", "Editor y herramientas", ""),
+    ("recorder", "Abrir el grabador de pantalla", "Editor y herramientas", ""),
+    ("record_toggle", "Iniciar/detener grabacion", "Editor y herramientas", "Ctrl+Alt+R"),
     ("color", "Selector de color", "Editor y herramientas", ""),
     ("magnifier", "Lupa", "Editor y herramientas", ""),
     ("ruler", "Regla de pixeles", "Editor y herramientas", ""),

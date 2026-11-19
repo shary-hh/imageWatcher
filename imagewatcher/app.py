@@ -420,6 +420,7 @@ class Application:
                 "repeat": lambda: self.do_capture("repeat"),
                 "editor": self.open_editor_blank,
                 "recorder": lambda: self.open_tool("recorder"),
+                "record_toggle": self.toggle_recorder,
                 "color": lambda: self.open_tool("color"),
                 "magnifier": lambda: self.open_tool("magnifier"),
                 "ruler": lambda: self.open_tool("ruler"),
@@ -672,9 +673,10 @@ class Application:
             existing = self.tool_windows.get("recorder")
             if existing is not None:
                 try:
-                    if existing.get_visible():
-                        existing.present()
-                        return existing
+                    # Puede estar oculto porque la grabacion se inicio con el
+                    # atajo global; no hay que crear una segunda ventana.
+                    existing.present()
+                    return existing
                 except Exception:
                     pass
             window = open_recorder(self.config)
@@ -698,6 +700,14 @@ class Application:
         if name in OPEN_OVERLAY_MODES:
             return self._toggle_overlay(name)
         return None
+
+    def toggle_recorder(self):
+        """Atajo global: inicia o detiene la grabacion de pantalla."""
+        window = self.tool_windows.get("recorder")
+        if window is None:
+            window = self.open_tool("recorder")
+        if window is not None:
+            window.toggle_recording()
 
     def favorite_tool_ids(self):
         valid = set(FAVORITE_TOOL_MAP)

@@ -213,6 +213,20 @@ window.imagewatcher .pill button.color {{
 .dim {{ color: {TEXT_DIM}; }}
 .accent {{ color: #6db2ff; }}
 
+.countdown-overlay {{
+    background-color: rgba(8, 10, 14, 0.72);
+}}
+.countdown-overlay label {{ color: #ffffff; }}
+.countdown-number {{
+    font-family: "DejaVu Sans Mono", monospace;
+    font-size: 220px;
+    font-weight: 800;
+}}
+.countdown-hint {{
+    font-size: 16px;
+    color: rgba(233, 237, 245, 0.78);
+}}
+
 .pill {{
     background-color: {LIGHT_BG};
     border: 1px solid {LIGHT_BORDER};

@@ -131,6 +131,27 @@ def test_favorite_tools_are_filtered_and_dispatched():
     ]
 
 
+def test_toggle_recorder_uses_or_opens_the_window():
+    from types import SimpleNamespace
+
+    from imagewatcher.app import Application
+
+    calls = []
+    window = SimpleNamespace(toggle_recording=lambda: calls.append("toggle"))
+    app = SimpleNamespace(tool_windows={"recorder": window})
+    Application.toggle_recorder(app)
+    assert calls == ["toggle"]
+
+    opened = []
+    app = SimpleNamespace(
+        tool_windows={},
+        open_tool=lambda name: opened.append(name) or window,
+    )
+    Application.toggle_recorder(app)
+    assert opened == ["recorder"]
+    assert calls == ["toggle", "toggle"]
+
+
 def test_color_history_uses_selected_format():
     from types import SimpleNamespace
 
@@ -169,10 +190,19 @@ def test_hotkey_defaults(monkeypatch, tmp_path):
     hotkeys = config_module.Config().get("hotkeys")
     assert "fullscreen" in hotkeys
     assert "region" in hotkeys
-    for action in ("scrolling", "delayed", "editor", "recorder", "color", "quit"):
+    for action in (
+        "scrolling",
+        "delayed",
+        "editor",
+        "recorder",
+        "record_toggle",
+        "color",
+        "quit",
+    ):
         assert action in hotkeys
         assert isinstance(hotkeys[action], str)
     assert hotkeys["fullscreen"] == "Ctrl+Alt+1"
+    assert hotkeys["record_toggle"] == "Ctrl+Alt+R"
 
 
 def test_partial_file_is_merged_with_defaults(monkeypatch, tmp_path):
@@ -181,6 +211,7 @@ def test_partial_file_is_merged_with_defaults(monkeypatch, tmp_path):
     cfg = config_module.Config()
     assert cfg.get("save_format") == "bmp"
     assert cfg.get("jpeg_quality") == 90
+    assert cfg.get("hotkeys")["record_toggle"] == "Ctrl+Alt+R"
 
 
 def test_ensure_save_dir(monkeypatch, tmp_path):

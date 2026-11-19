@@ -9,9 +9,10 @@ import time
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 gi.require_version("Gio", "2.0")
 
-from gi.repository import Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from . import capture, session, ui  # noqa: E402
 
@@ -41,12 +42,87 @@ def _detect_backend():
     return None
 
 
+class CountdownOverlay(Gtk.Window):
+    """Cuenta regresiva a pantalla completa, sin bloquear el escritorio."""
+
+    def __init__(self):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        ui.install_theme()
+        self.set_decorated(False)
+        self.set_keep_above(True)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
+        self.set_accept_focus(False)
+        self.set_type_hint(
+            Gdk.WindowTypeHint.NOTIFICATION
+            if hasattr(Gdk.WindowTypeHint, "NOTIFICATION")
+            else Gdk.WindowTypeHint.NORMAL
+        )
+        visual = self.get_screen().get_rgba_visual()
+        if visual is not None:
+            self.set_visual(visual)
+        self.set_app_paintable(True)
+        self.get_style_context().add_class("countdown-overlay")
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_halign(Gtk.Align.CENTER)
+        box.set_valign(Gtk.Align.CENTER)
+        self.number = Gtk.Label(label="")
+        self.number.get_style_context().add_class("countdown-number")
+        box.pack_start(self.number, False, False, 0)
+        hint = Gtk.Label(label="La grabacion comienza en breve")
+        hint.get_style_context().add_class("countdown-hint")
+        box.pack_start(hint, False, False, 0)
+        self.add(box)
+
+        if not capture.is_wayland():
+            monitors = capture.monitor_geometries()
+            if monitors:
+                left = min(monitor.x for monitor in monitors)
+                top = min(monitor.y for monitor in monitors)
+                right = max(monitor.x + monitor.width for monitor in monitors)
+                bottom = max(monitor.y + monitor.height for monitor in monitors)
+                width, height = right - left, bottom - top
+            else:
+                left, top = 0, 0
+                width, height = capture.virtual_screen_size()
+            self.set_default_size(width, height)
+            self.move(left, top)
+            self.resize(width, height)
+            self.connect("realize", lambda *_: self._click_through())
+            self._click_through()
+        self.show_all()
+        if capture.is_wayland():
+            try:
+                self.fullscreen_on_monitor(
+                    self.get_screen(), capture.region_monitor_index()
+                )
+            except Exception:
+                self.fullscreen()
+        self.present()
+
+    def _click_through(self):
+        """Deja pasar los clics: el aviso es solo visual."""
+        try:
+            import cairo
+
+            window = self.get_window()
+            if window is not None:
+                window.input_shape_combine_region(cairo.Region(), 0, 0)
+        except Exception:
+            pass
+
+    def set_remaining(self, seconds):
+        self.number.set_text(str(max(0, int(seconds))))
+
+
 class RecorderWindow(Gtk.Window):
-    def __init__(self, config):
+    def __init__(self, config, countdown_overlay=True):
         super().__init__(title="Grabador de pantalla")
         ui.install_theme()
         ui.apply_dark(self)
         self.config = config
+        self.countdown_overlay_enabled = bool(countdown_overlay)
         self.process = None
         self.output_path = None
         self.region = None
@@ -60,6 +136,7 @@ class RecorderWindow(Gtk.Window):
         self._timer = None
         self._countdown_timer = None
         self._countdown_remaining = 0
+        self._countdown_overlay = None
         self.set_default_size(440, 300)
         subtitle = {
             "x11": "Video con ffmpeg",
@@ -118,13 +195,24 @@ class RecorderWindow(Gtk.Window):
 
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.start_btn = Gtk.Button(label="Iniciar grabacion")
+        self.start_btn.set_tooltip_text("Iniciar grabacion (Ctrl+R)")
         self.start_btn.connect("clicked", lambda *_: self._start())
         buttons.pack_start(self.start_btn, True, True, 0)
         self.stop_btn = Gtk.Button(label="Detener")
+        self.stop_btn.set_tooltip_text("Detener grabacion (Ctrl+R)")
         self.stop_btn.set_sensitive(False)
         self.stop_btn.connect("clicked", lambda *_: self._stop())
         buttons.pack_start(self.stop_btn, True, True, 0)
         root.pack_start(buttons, False, False, 0)
+
+        hotkey = (config.get("hotkeys") or {}).get("record_toggle", "")
+        if hotkey:
+            hint = Gtk.Label(
+                label=f"Atajo global: {hotkey} para iniciar o detener",
+                xalign=0,
+            )
+            hint.get_style_context().add_class("dim")
+            root.pack_start(hint, False, False, 0)
 
         self.status = Gtk.Label(label="Listo", xalign=0)
         root.pack_start(self.status, False, False, 0)
@@ -154,6 +242,12 @@ class RecorderWindow(Gtk.Window):
 
         if event.keyval == Gdk.KEY_Escape:
             self.destroy()
+            return True
+        if (
+            event.keyval in (Gdk.KEY_r, Gdk.KEY_R)
+            and event.state & Gdk.ModifierType.CONTROL_MASK
+        ):
+            self.toggle_recording()
             return True
         return False
 
@@ -347,9 +441,47 @@ class RecorderWindow(Gtk.Window):
             f"<span font_family='monospace' font_size='{size}'{weight}>{text}</span>"
         )
 
+    def is_busy(self):
+        """True si hay una grabacion o una cuenta regresiva en curso."""
+        return (
+            self._countdown_timer is not None
+            or self.process is not None
+            or self._gnome_screencast
+        )
+
+    def toggle_recording(self):
+        """Inicia o detiene la grabacion (atajo global y Ctrl+R)."""
+        if self.is_busy():
+            self._stop()
+            self.present()
+            return
+        if not self._can_start():
+            self.present()
+            self.status.set_text("No se puede iniciar la grabacion")
+            return
+        # Al grabar desde un atajo, la ventana no debe salir en el video.
+        self.hide()
+        self._start()
+        if not self.is_busy():
+            # No se pudo iniciar (backend o ffmpeg): muestra el motivo.
+            self.present()
+
+    def _show_countdown_overlay(self):
+        if not self.countdown_overlay_enabled:
+            return
+        if self._countdown_overlay is None:
+            self._countdown_overlay = CountdownOverlay()
+        self._countdown_overlay.set_remaining(self._countdown_remaining)
+
+    def _hide_countdown_overlay(self):
+        if self._countdown_overlay is not None:
+            self._countdown_overlay.destroy()
+            self._countdown_overlay = None
+
     def _show_countdown(self):
         remaining = self._countdown_remaining
         self._set_timer_text(str(remaining), countdown=True)
+        self._show_countdown_overlay()
         self.status.set_text(f"La grabacion empieza en {remaining} s...")
 
     def _begin_countdown(self, seconds):
@@ -364,6 +496,7 @@ class RecorderWindow(Gtk.Window):
             self._countdown_remaining -= 1
         if self._countdown_remaining <= 0:
             self._countdown_timer = None
+            self._hide_countdown_overlay()
             self._set_timer_text("00:00")
             self._start_recording()
             return False
@@ -378,6 +511,7 @@ class RecorderWindow(Gtk.Window):
                 pass
             self._countdown_timer = None
         self._countdown_remaining = 0
+        self._hide_countdown_overlay()
         self._set_timer_text("00:00")
         self.start_btn.set_sensitive(self._can_start())
         self.stop_btn.set_sensitive(False)
