@@ -111,8 +111,10 @@ class RecorderWindow(Gtk.Window):
         grid.attach(self.audio_check, 1, 3, 1, 1)
 
         self.timer_label = Gtk.Label(label="00:00")
-        self.timer_label.set_markup("<span size='xx-large'>00:00</span>")
-        root.pack_start(self.timer_label, False, False, 4)
+        self.timer_label.set_xalign(0.5)
+        self.timer_label.set_justify(Gtk.Justification.CENTER)
+        self._set_timer_text("00:00")
+        root.pack_start(self.timer_label, True, True, 4)
 
         buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.start_btn = Gtk.Button(label="Iniciar grabacion")
@@ -337,11 +339,17 @@ class RecorderWindow(Gtk.Window):
         except Exception:
             pass
 
+    def _set_timer_text(self, text, countdown=False):
+        """Actualiza el reloj. La cuenta regresiva se muestra grande y centrada."""
+        size = "72pt" if countdown else "28pt"
+        weight = " weight='bold'" if countdown else ""
+        self.timer_label.set_markup(
+            f"<span font_family='monospace' font_size='{size}'{weight}>{text}</span>"
+        )
+
     def _show_countdown(self):
         remaining = self._countdown_remaining
-        self.timer_label.set_markup(
-            f"<span size='xx-large'>{remaining}</span>"
-        )
+        self._set_timer_text(str(remaining), countdown=True)
         self.status.set_text(f"La grabacion empieza en {remaining} s...")
 
     def _begin_countdown(self, seconds):
@@ -356,9 +364,7 @@ class RecorderWindow(Gtk.Window):
             self._countdown_remaining -= 1
         if self._countdown_remaining <= 0:
             self._countdown_timer = None
-            self.timer_label.set_markup(
-                "<span size='xx-large'>00:00</span>"
-            )
+            self._set_timer_text("00:00")
             self._start_recording()
             return False
         self._show_countdown()
@@ -372,7 +378,7 @@ class RecorderWindow(Gtk.Window):
                 pass
             self._countdown_timer = None
         self._countdown_remaining = 0
-        self.timer_label.set_markup("<span size='xx-large'>00:00</span>")
+        self._set_timer_text("00:00")
         self.start_btn.set_sensitive(self._can_start())
         self.stop_btn.set_sensitive(False)
 
@@ -472,7 +478,7 @@ class RecorderWindow(Gtk.Window):
             self._timer = None
             return False
         elapsed = int(time.time() - self.start_time) if self.start_time else 0
-        self.timer_label.set_markup(f"<span size='xx-large'>{elapsed // 60:02d}:{elapsed % 60:02d}</span>")
+        self._set_timer_text(f"{elapsed // 60:02d}:{elapsed % 60:02d}")
         return True
 
     def _stop(self):
