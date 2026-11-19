@@ -291,18 +291,33 @@ class RecorderWindow(Gtk.Window):
         self.start_btn.connect("clicked", lambda *_: self._start())
         buttons.pack_start(self.start_btn, True, True, 0)
         self.stop_btn = Gtk.Button(label="Detener")
-        self.stop_btn.set_tooltip_text("Detener grabacion (Ctrl+R)")
+        self.stop_btn.set_tooltip_text("Detener grabacion y guardar (Ctrl+R)")
         self.stop_btn.set_sensitive(False)
         self.stop_btn.connect("clicked", lambda *_: self._stop())
         buttons.pack_start(self.stop_btn, True, True, 0)
+        self.cancel_btn = Gtk.Button(label="Cancelar")
+        self.cancel_btn.set_tooltip_text(
+            "Cancelar la grabacion y descartar el archivo"
+        )
+        self.cancel_btn.set_sensitive(False)
+        self.cancel_btn.connect("clicked", lambda *_: self.cancel_recording())
+        buttons.pack_start(self.cancel_btn, True, True, 0)
+        self.stop_btn.connect(
+            "notify::sensitive",
+            lambda *_: self.cancel_btn.set_sensitive(self.stop_btn.get_sensitive()),
+        )
         root.pack_start(buttons, False, False, 0)
 
-        hotkey = (config.get("hotkeys") or {}).get("record_toggle", "")
-        if hotkey:
-            hint = Gtk.Label(
-                label=f"Atajo global: {hotkey} para iniciar o detener",
-                xalign=0,
-            )
+        toggle_hotkey = (config.get("hotkeys") or {}).get("record_toggle", "")
+        cancel_hotkey = (config.get("hotkeys") or {}).get("record_cancel", "")
+        hints = []
+        if toggle_hotkey:
+            hints.append(f"{toggle_hotkey} iniciar/detener")
+        if cancel_hotkey:
+            hints.append(f"{cancel_hotkey} cancelar")
+        if hints:
+            hint = Gtk.Label(label="Atajos: " + " - ".join(hints), xalign=0)
+            hint.set_line_wrap(True)
             hint.get_style_context().add_class("dim")
             root.pack_start(hint, False, False, 0)
 
@@ -719,6 +734,23 @@ class RecorderWindow(Gtk.Window):
             # No se pudo iniciar (backend o ffmpeg): muestra el motivo.
             self.present()
 
+    def cancel_recording(self):
+        """Detiene la grabacion sin guardar el archivo."""
+        if self._converting:
+            self.present()
+            self.status.set_text("Generando GIF...")
+            return
+        if self._countdown_timer is not None or self._region_selector is not None:
+            self._stop()
+            self.present()
+            return
+        if self.process is not None or self._gnome_screencast:
+            self._stop(discard=True)
+            self.present()
+            return
+        self.present()
+        self.status.set_text("No hay grabacion activa")
+
     def _show_countdown_overlay(self):
         if not self.countdown_overlay_enabled:
             return
@@ -979,7 +1011,7 @@ class RecorderWindow(Gtk.Window):
         self._set_timer_text(f"{elapsed // 60:02d}:{elapsed % 60:02d}")
         return True
 
-    def _stop(self):
+    def _stop(self, discard=False):
         if self._countdown_timer is not None:
             self._cancel_countdown()
             self.status.set_text("Grabacion cancelada")
@@ -1053,12 +1085,26 @@ class RecorderWindow(Gtk.Window):
         self.start_btn.set_sensitive(self._can_start())
         self.stop_btn.set_sensitive(False)
         self.format_combo.set_sensitive(True)
+        if discard:
+            self._discard_outputs()
+            self.status.set_text("Grabacion cancelada")
+            return
         temp = self._temp_path
         self._temp_path = None
         if temp:
             self._start_gif_conversion(temp)
         else:
             self.status.set_text(f"Guardado: {self.output_path}")
+
+    def _discard_outputs(self):
+        for path in (self._temp_path, self.output_path):
+            if not path:
+                continue
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        self._temp_path = None
 
     def _start_gif_conversion(self, video_path):
         """Convierte el video temporal a GIF sin bloquear la interfaz."""

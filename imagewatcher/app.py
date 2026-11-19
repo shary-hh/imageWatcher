@@ -421,6 +421,7 @@ class Application:
                 "editor": self.open_editor_blank,
                 "recorder": lambda: self.open_tool("recorder"),
                 "record_toggle": self.toggle_recorder,
+                "record_cancel": self.cancel_recording,
                 "color": lambda: self.open_tool("color"),
                 "magnifier": lambda: self.open_tool("magnifier"),
                 "ruler": lambda: self.open_tool("ruler"),
@@ -708,6 +709,12 @@ class Application:
             window = self.open_tool("recorder")
         if window is not None:
             window.toggle_recording()
+
+    def cancel_recording(self):
+        """Atajo global: cancela la grabacion sin guardar el archivo."""
+        window = self.tool_windows.get("recorder")
+        if window is not None:
+            window.cancel_recording()
 
     def favorite_tool_ids(self):
         valid = set(FAVORITE_TOOL_MAP)

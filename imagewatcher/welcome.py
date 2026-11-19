@@ -25,6 +25,7 @@ SECTIONS = [
             "Ctrl+Alt+1 Pantalla - Ctrl+Alt+2 Region - Ctrl+Alt+3 Ventana",
             "Ctrl+Alt+4 Repetir - Ctrl+Alt+5 Region fija - Ctrl+Alt+6 Freehand",
             "Ctrl+Alt+R inicia o detiene la grabacion de pantalla.",
+            "Ctrl+Alt+X cancela la grabacion y descarta el archivo.",
             "Esc cancela la seleccion o cierra las superposiciones.",
         ],
     ),

@@ -225,6 +225,43 @@ def test_area_combo_opens_the_picker_only_when_needed():
         recorder.destroy()
 
 
+def test_cancel_button_mirrors_stop_and_cancels_countdown():
+    recorder = _recorder()
+    recorder._can_start = lambda: True
+    recorder._start_recording = lambda: None
+    recorder.countdown_spin.set_value(5)
+    try:
+        assert recorder.cancel_btn.get_sensitive() is False
+        recorder._start()
+        assert recorder.stop_btn.get_sensitive() is True
+        assert recorder.cancel_btn.get_sensitive() is True
+
+        recorder.cancel_recording()
+        assert recorder._countdown_timer is None
+        assert "cancelada" in recorder.status.get_text()
+        assert recorder.stop_btn.get_sensitive() is False
+        assert recorder.cancel_btn.get_sensitive() is False
+    finally:
+        recorder.destroy()
+
+
+def test_discard_outputs_removes_the_recording(tmp_path):
+    recorder = _recorder()
+    output = tmp_path / "grabacion.mp4"
+    temp = tmp_path / "grabacion.tmp.mp4"
+    output.write_bytes(b"video")
+    temp.write_bytes(b"temp")
+    recorder.output_path = str(output)
+    recorder._temp_path = str(temp)
+    try:
+        recorder._discard_outputs()
+        assert not output.exists()
+        assert not temp.exists()
+        assert recorder._temp_path is None
+    finally:
+        recorder.destroy()
+
+
 def test_area_mode_switches_between_fullscreen_and_region(monkeypatch):
     from types import SimpleNamespace
 

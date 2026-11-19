@@ -19,6 +19,7 @@ HOTKEY_ACTIONS = [
     ("editor", "Editor de imagenes", "Editor y herramientas", ""),
     ("recorder", "Abrir el grabador de pantalla", "Editor y herramientas", ""),
     ("record_toggle", "Iniciar/detener grabacion", "Editor y herramientas", "Ctrl+Alt+R"),
+    ("record_cancel", "Cancelar grabacion", "Editor y herramientas", "Ctrl+Alt+X"),
     ("color", "Selector de color", "Editor y herramientas", ""),
     ("magnifier", "Lupa", "Editor y herramientas", ""),
     ("ruler", "Regla de pixeles", "Editor y herramientas", ""),

@@ -89,6 +89,8 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
   15 FPS, ideal para compartir una region corta.
 - Atajo global `Ctrl+Alt+R` para iniciar o detener la grabacion sin abrir la
   ventana del grabador.
+- Boton **Cancelar** y atajo global `Ctrl+Alt+X` para descartar la grabacion
+  en curso sin guardar el archivo.
 - FPS ajustable y audio del sistema opcional (segun el backend).
 
 ### Integracion
@@ -248,6 +250,7 @@ Puedes mover la barra arrastrandola.
 | Ventana activa | `Ctrl+Alt+3` |
 | Repetir ultima | `Ctrl+Alt+4` |
 | Iniciar/detener grabacion | `Ctrl+Alt+R` |
+| Cancelar grabacion | `Ctrl+Alt+X` |
 
 Los atajos se cambian en **Preferencias > Atajos** con el formato
 `modificadores+tecla`, por ejemplo `Print`, `Ctrl+Alt+1` o `Shift+Alt+P`.

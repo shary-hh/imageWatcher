@@ -153,6 +153,20 @@ def test_toggle_recorder_uses_or_opens_the_window():
     assert calls == ["toggle", "toggle"]
 
 
+def test_cancel_recorder_uses_the_window():
+    from types import SimpleNamespace
+
+    from imagewatcher.app import Application
+
+    calls = []
+    window = SimpleNamespace(cancel_recording=lambda: calls.append("cancel"))
+    app = SimpleNamespace(tool_windows={"recorder": window})
+    Application.cancel_recording(app)
+    assert calls == ["cancel"]
+
+    Application.cancel_recording(SimpleNamespace(tool_windows={}))
+
+
 def test_color_history_uses_selected_format():
     from types import SimpleNamespace
 
@@ -197,6 +211,7 @@ def test_hotkey_defaults(monkeypatch, tmp_path):
         "editor",
         "recorder",
         "record_toggle",
+        "record_cancel",
         "color",
         "quit",
     ):
@@ -204,6 +219,7 @@ def test_hotkey_defaults(monkeypatch, tmp_path):
         assert isinstance(hotkeys[action], str)
     assert hotkeys["fullscreen"] == "Ctrl+Alt+1"
     assert hotkeys["record_toggle"] == "Ctrl+Alt+R"
+    assert hotkeys["record_cancel"] == "Ctrl+Alt+X"
 
 
 def test_partial_file_is_merged_with_defaults(monkeypatch, tmp_path):
@@ -213,6 +229,7 @@ def test_partial_file_is_merged_with_defaults(monkeypatch, tmp_path):
     assert cfg.get("save_format") == "bmp"
     assert cfg.get("jpeg_quality") == 90
     assert cfg.get("hotkeys")["record_toggle"] == "Ctrl+Alt+R"
+    assert cfg.get("hotkeys")["record_cancel"] == "Ctrl+Alt+X"
 
 
 def test_ensure_save_dir(monkeypatch, tmp_path):
