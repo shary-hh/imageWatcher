@@ -252,6 +252,50 @@ def test_stitch_skips_uniform_band_to_align():
     assert stitched.height == 540
 
 
+def test_scrolling_fixed_top_detects_browser_header():
+    """La barra fija del navegador se detecta para recortarla del resultado."""
+    frames = _scrolling_frames(header_height=80)
+    assert capture._scrolling_fixed_top(frames) == 80
+
+    stitched = capture.stitch_vertical(frames)
+    top = capture._scrolling_fixed_top(frames)
+    trimmed = stitched.crop((0, top, stitched.width, stitched.height))
+    assert trimmed.height == stitched.height - 80
+
+
+def test_scrolling_fixed_top_ignores_blank_page_top():
+    """Un inicio de pagina liso no debe confundirse con la barra del navegador."""
+    frames = _scrolling_frames(header_height=80, blank_top=120)
+    assert capture._scrolling_fixed_top(frames) == 80
+
+
+def test_scrolling_fixed_top_without_header():
+    frames = _scrolling_frames(header_height=0)
+    assert capture._scrolling_fixed_top(frames) == 0
+
+
+def _scrolling_frames(header_height=80, step=160, frame_height=480, width=120, blank_top=0):
+    from PIL import Image
+
+    page = _noise_image(width, 1600, seed=21)
+    if blank_top:
+        page.paste(Image.new("RGB", (width, blank_top), (250, 250, 250)), (0, 0))
+    header = _noise_image(width, header_height, seed=7) if header_height else None
+    frames = []
+    for index in range(6):
+        frame = Image.new("RGB", (width, frame_height))
+        if header is not None:
+            frame.paste(header, (0, 0))
+        content_height = frame_height - header_height
+        start = index * step
+        frame.paste(
+            page.crop((0, start, width, start + content_height)),
+            (0, header_height),
+        )
+        frames.append(frame)
+    return frames
+
+
 def test_stitch_avoids_repeating_fixed_bottom_overlay():
     """Un boton fijo en la esquina inferior no debe repetirse en cada frame."""
     from PIL import ImageDraw

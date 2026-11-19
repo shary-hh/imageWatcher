@@ -14,6 +14,7 @@ def test_defaults_and_persistence(monkeypatch, tmp_path):
     assert cfg.get("copy_to_clipboard") is True
     assert cfg.get("show_capture_bar") is True
     assert cfg.get("capture_panel") is True
+    assert cfg.get("scrolling_trim_header") is True
     assert cfg.get("snap_enabled") is True
     assert cfg.get("color_zoom") == 11
     assert cfg.get("record_countdown") == 3

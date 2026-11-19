@@ -28,6 +28,9 @@ con Python + GTK3 + Pillow + Xlib.
 - Opcion de incluir el cursor del raton.
 - Opcion de incluir el panel (barra de menu) del escritorio en las capturas de
   pantalla completa y monitor (`Preferencias > General`).
+- En **Ventana con desplazamiento**, opcion de recortar la barra fija superior
+  (pestanas y barra de direcciones del navegador) del resultado
+  (`Preferencias > General`).
 
 ### Editor de imagenes
 - Anotaciones: lapiz, rotulador, resaltador, linea, flecha, rectangulo, elipse.

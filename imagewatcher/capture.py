@@ -514,6 +514,72 @@ def find_vertical_shift(
 
 BOTTOM_GUARD = 200
 
+FIXED_TOP_MAX_RATIO = 0.5
+FIXED_TOP_MAX_HEIGHT = 400
+FIXED_TOP_MIN_HEIGHT = 12
+CONTENT_ROW_RUN = 48
+
+
+def _scrolling_fixed_top(frames, max_pairs=3):
+    """Altura de la franja fija superior (pestanas/barra del navegador).
+
+    Compara cada fila del frame actual con la fila que ocupaba el mismo
+    contenido ``step`` filas mas arriba en el frame anterior. El contenido
+    coincide (sube al hacer scroll) y la cabecera fija no, asi que la primera
+    racha de filas coincidentes marca donde empieza la pagina.
+
+    Devuelve 0 si no se detecta una franja fija clara. Se usan solo los
+    primeros frames para no repetir el coste de alineacion en capturas largas.
+    """
+    if len(frames) < 2:
+        return 0
+    pairs = []
+    for previous, current in zip(frames, frames[1:]):
+        step, _diff = find_vertical_shift(
+            previous, current, min_shift=1, max_shift=previous.height
+        )
+        if step <= 2 or step >= previous.height - STATIC_ROW_RUN:
+            continue
+        pairs.append((previous, current, step))
+        if len(pairs) >= max_pairs:
+            break
+    if not pairs:
+        return 0
+
+    limit = min(
+        int(frames[0].height * FIXED_TOP_MAX_RATIO),
+        FIXED_TOP_MAX_HEIGHT,
+        min(previous.height - step for previous, _current, step in pairs),
+        min(current.height for _previous, current, _step in pairs),
+    )
+    if limit <= CONTENT_ROW_RUN:
+        return 0
+
+    rows_by_pair = []
+    for previous, current, step in pairs:
+        width = min(previous.width, current.width)
+        # previous[step + y] es el contenido que ahora ocupa current[y].
+        old_content = previous.crop((0, step, width, step + limit))
+        new_content = current.crop((0, 0, width, limit))
+        rows_by_pair.append(_row_diff_means(old_content, new_content))
+
+    count = min(len(rows) for rows in rows_by_pair)
+    scores = []
+    for y in range(count):
+        values = sorted(rows[y] for rows in rows_by_pair)
+        scores.append(values[len(values) // 2])
+
+    run = 0
+    for y, score in enumerate(scores):
+        if score <= STATIC_ROW_THRESHOLD:
+            run += 1
+            if run >= CONTENT_ROW_RUN:
+                top = y - CONTENT_ROW_RUN + 1
+                return top if top >= FIXED_TOP_MIN_HEIGHT else 0
+        else:
+            run = 0
+    return 0
+
 
 def _append_vertical(result, part):
     if part.height <= 0:
@@ -699,11 +765,14 @@ def _capture_settled(
     return frame
 
 
-def capture_scrolling_window(max_scrolls=100):
+def capture_scrolling_window(max_scrolls=100, trim_header=True):
     """Captura una ventana larga desplazandola y empalmando con Pillow.
 
     ``max_scrolls`` es solo un limite de seguridad: el bucle termina antes al
     llegar al final de la pagina (cuando la rueda ya no la desplaza).
+
+    Con ``trim_header`` se recorta la franja fija superior (pestanas y barra
+    de direcciones del navegador, por ejemplo) del resultado final.
     """
     geom = active_window_geometry()
     if geom is None:
@@ -728,7 +797,12 @@ def capture_scrolling_window(max_scrolls=100):
             continue
         stalls = 0
         frames.append(frame)
-    return stitch_vertical(frames)
+    result = stitch_vertical(frames)
+    if trim_header and result is not None:
+        top = _scrolling_fixed_top(frames)
+        if 0 < top < result.height:
+            result = result.crop((0, top, result.width, result.height))
+    return result
 
 
 

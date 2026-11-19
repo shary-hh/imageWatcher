@@ -579,7 +579,9 @@ class Application:
                         "Ventana con desplazamiento",
                         "En Wayland instala ydotool o wlrctl para simular la rueda.",
                     )
-                image = capture.capture_scrolling_window()
+                image = capture.capture_scrolling_window(
+                    trim_header=self.config.get("scrolling_trim_header", True)
+                )
                 self.last_capture = {"mode": "scrolling"}
             elif mode == "monitor":
                 image = capture.capture_monitor(
@@ -1127,6 +1129,19 @@ class PreferencesDialog(Gtk.Dialog):
         )
         box.pack_start(self.panel_check, False, False, 0)
 
+        self.scrolling_trim_check = Gtk.CheckButton(
+            label="Recortar la barra fija superior (navegador)"
+        )
+        self.scrolling_trim_check.set_active(
+            self.config.get("scrolling_trim_header", True)
+        )
+        self.scrolling_trim_check.set_tooltip_text(
+            "En Ventana con desplazamiento, quita de la imagen las pestanas y la "
+            "barra de direcciones del navegador, y otras barras que no se mueven "
+            "al hacer scroll. Tambien puede recortar cabeceras fijas de la pagina."
+        )
+        box.pack_start(self.scrolling_trim_check, False, False, 0)
+
         self.show_bar_check = Gtk.CheckButton(label="Mostrar la barra de captura")
         self.show_bar_check.set_active(self.config.get("show_capture_bar", True))
         self.show_bar_check.set_tooltip_text(
@@ -1376,6 +1391,7 @@ class PreferencesDialog(Gtk.Dialog):
         self.config["copy_to_clipboard"] = self.clipboard_check.get_active()
         self.config["capture_cursor"] = self.cursor_check.get_active()
         self.config["capture_panel"] = self.panel_check.get_active()
+        self.config["scrolling_trim_header"] = self.scrolling_trim_check.get_active()
         self.config["show_capture_bar"] = self.show_bar_check.get_active()
         self.config["snap_enabled"] = self.snap_check.get_active()
         self.config["color_zoom"] = int(self.color_zoom_spin.get_value())
