@@ -375,7 +375,7 @@ class RecorderWindow(Gtk.Window):
             self.region = image
             self.region_offset = holder.get("rect", (0, 0, image.width, image.height))[:2]
             self.area_label.set_text(f"Region {image.width}x{image.height}")
-            self.pick_button.set_text("Ajustar region...")
+            self.pick_button.set_label("Ajustar region...")
             self.show()
 
         selector = RegionSelector(
@@ -417,7 +417,7 @@ class RecorderWindow(Gtk.Window):
             x, y, width, height = (int(value) for value in match.groups())
             self.region_geometry = (x, y, width, height)
             self.area_label.set_text(f"Region {width}x{height}")
-            self.pick_button.set_text("Ajustar region...")
+            self.pick_button.set_label("Ajustar region...")
             self.show()
             return
 
@@ -442,7 +442,7 @@ class RecorderWindow(Gtk.Window):
                     (0, 0, base.width, base.height), base
                 )
             self.area_label.set_text(f"Region {image.width}x{image.height}")
-            self.pick_button.set_text("Ajustar region...")
+            self.pick_button.set_label("Ajustar region...")
             self.show()
 
         selector = RegionSelector(

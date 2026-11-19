@@ -201,6 +201,44 @@ def test_initial_region_rect_uses_current_selection():
         recorder.destroy()
 
 
+def test_region_selection_updates_the_pick_button(monkeypatch):
+    from imagewatcher import recorder as recorder_module
+    from imagewatcher import region as region_module
+
+    if capture.is_wayland():
+        pytest.skip("la prueba usa la captura x11")
+
+    recorder = _recorder()
+    captured = {}
+
+    class _Selector:
+        def __init__(self, base, on_done, on_cancel=None, detect_windows=True,
+                     initial_rect=None, **_kwargs):
+            captured["done"] = on_done
+            captured["initial"] = initial_rect
+
+        def _finish_accept(self, rect):
+            captured["rect"] = rect
+
+    monkeypatch.setattr(region_module, "RegionSelector", _Selector)
+    monkeypatch.setattr(
+        recorder_module.capture,
+        "capture_screen",
+        lambda: Image.new("RGBA", (800, 600)),
+    )
+    try:
+        recorder._pick_region()
+        assert captured["initial"] is None
+        captured["done"](Image.new("RGBA", (200, 100)))
+        assert recorder.pick_button.get_label() == "Ajustar region..."
+        assert recorder.region.size == (200, 100)
+
+        recorder._pick_region()
+        assert captured["initial"] == (0, 0, 200, 100)
+    finally:
+        recorder.destroy()
+
+
 def test_video_to_gif_generates_animated_gif(tmp_path):
     from imagewatcher.recorder import ffmpeg_path
 
