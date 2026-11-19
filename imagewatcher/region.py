@@ -185,11 +185,10 @@ class RegionSelector(Gtk.Window):
         self.move(0, 0)
         self.resize(width, height)
 
-        if self.fixed_size:
-            if initial_rect:
-                self.rect = self._clamp_rect(*initial_rect)
-            else:
-                self.rect = self._center_rect(width / 2, height / 2, *self.fixed_size)
+        if initial_rect:
+            self.rect = self._clamp_rect(*initial_rect)
+        elif self.fixed_size:
+            self.rect = self._center_rect(width / 2, height / 2, *self.fixed_size)
 
         self.area = Gtk.DrawingArea()
         self.area.set_size_request(width, height)

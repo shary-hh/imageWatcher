@@ -113,6 +113,32 @@ def test_region_can_disable_magnets(pump):
         selector.destroy()
 
 
+def test_region_initial_rect_can_be_moved_and_resized(pump):
+    selector = RegionSelector(
+        Image.new("RGBA", (800, 600), (0, 0, 0, 255)),
+        lambda image: None,
+        initial_rect=(100, 80, 300, 200),
+    )
+    pump(120)
+    try:
+        assert selector.rect == (100, 80, 300, 200)
+        assert selector._handle_at(100, 80) == "nw"
+
+        selector.mode = "moving"
+        selector._drag_start = (200, 150)
+        selector._rect_start = selector._ltrb(selector.rect)
+        selector._on_motion(None, _Mouse(250, 180))
+        assert selector.rect == (150, 110, 300, 200)
+
+        selector.mode = "resizing"
+        selector.handle = "se"
+        selector._rect_start = selector._ltrb(selector.rect)
+        selector._on_motion(None, _Mouse(520, 380))
+        assert selector.rect == (150, 110, 370, 270)
+    finally:
+        selector.destroy()
+
+
 def test_region_handle_detection(pump):
     selector = _selector(pump)
     try:

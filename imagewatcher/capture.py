@@ -258,6 +258,11 @@ def image_to_logical_box(box, image):
     )
 
 
+def logical_to_image_box(box, image):
+    """Convierte una geometria logica de Gdk a pixeles de la captura."""
+    return _logical_to_image(box, image)
+
+
 def capture_screen(include_cursor=False, include_panel=True):
     """Captura el escritorio completo (todos los monitores) como PIL RGBA.
 

@@ -73,7 +73,9 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 - **Pizarra** para dibujar y guardar.
 
 ### Grabacion de pantalla
-- X11: pantalla completa o region seleccionada, con `ffmpeg` (x11grab).
+- X11: pantalla completa o region seleccionada, con `ffmpeg` (x11grab). La
+  region se puede mover y redimensionar antes de grabar, y se conserva al
+  volver a pulsar **Ajustar region...**.
 - Wayland/wlroots: pantalla completa o region con `wf-recorder` (y `slurp`
   para elegir la region).
 - Wayland/GNOME: grabacion de pantalla completa con la API de GNOME Shell.

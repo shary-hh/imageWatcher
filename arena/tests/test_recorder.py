@@ -189,6 +189,18 @@ def test_video_to_gif_rejects_empty_input(tmp_path):
         video_to_gif(str(empty), str(tmp_path / "salida.gif"))
 
 
+def test_initial_region_rect_uses_current_selection():
+    recorder = _recorder()
+    base = Image.new("RGBA", (800, 600))
+    try:
+        assert recorder._initial_region_rect(base) is None
+        recorder.region = Image.new("RGBA", (320, 200))
+        recorder.region_offset = (40, 50)
+        assert recorder._initial_region_rect(base) == (40, 50, 320, 200)
+    finally:
+        recorder.destroy()
+
+
 def test_video_to_gif_generates_animated_gif(tmp_path):
     from imagewatcher.recorder import ffmpeg_path
 
