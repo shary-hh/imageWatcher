@@ -238,14 +238,20 @@ menu, .menu {{
     background-color: {BG_ALT};
     color: {TEXT};
     border: 1px solid {BORDER};
-    border-radius: 8px;
-    padding: 4px;
+    border-radius: 10px;
+    padding: 6px;
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
 }}
 menu > menuitem, .menu > menuitem {{
     background-image: none;
     background-color: transparent;
-    border-radius: 6px;
-    padding: 4px 8px;
+    border: none;
+    box-shadow: none;
+    border-radius: 7px;
+    padding: 6px 10px;
+}}
+menu menuitem arrow {{
+    margin-left: 18px;
 }}
 menu menuitem, menu menuitem label, .menu menuitem {{
     color: {TEXT};
@@ -263,6 +269,22 @@ menu menuitem:disabled label {{
 menu separator {{
     background-color: {BORDER};
     margin: 4px 0;
+}}
+
+/* Los menus abiertos desde la cabecera siguen colgando de `headerbar`, y la
+   regla `headerbar label` (texto oscuro para las barras claras) les ganaba en
+   especificidad: los dejaba ilegibles sobre el fondo oscuro. */
+window.imagewatcher headerbar menu,
+window.imagewatcher headerbar menu menuitem,
+window.imagewatcher headerbar menu menuitem label {{
+    color: {TEXT};
+}}
+window.imagewatcher headerbar menu menuitem:hover label,
+window.imagewatcher headerbar menu menuitem:focus label {{
+    color: #ffffff;
+}}
+window.imagewatcher headerbar menu menuitem:disabled label {{
+    color: {TEXT_DIM};
 }}
 
 .imagewatcher-bar button:focus,

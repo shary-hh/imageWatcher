@@ -1,11 +1,56 @@
 """Prueba de renderizado del editor (composicion correcta en el canvas)."""
 import cairo
+import gi
 import pytest
-from gi.repository import Gtk
-from PIL import Image
 
-from imagewatcher.config import Config
-from imagewatcher.editor import EditorWindow
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+
+from gi.repository import Gdk, Gtk  # noqa: E402
+from PIL import Image  # noqa: E402
+
+from imagewatcher.config import Config  # noqa: E402
+from imagewatcher.editor import EditorWindow  # noqa: E402
+
+
+def _find_menu_button(widget):
+    if isinstance(widget, Gtk.MenuButton):
+        return widget
+    if isinstance(widget, Gtk.Container):
+        for child in widget.get_children():
+            found = _find_menu_button(child)
+            if found is not None:
+                return found
+    return None
+
+
+def test_editor_menu_labels_stay_light_over_the_dark_menu(pump):
+    """El texto del menu no debe heredar el color oscuro de la cabecera."""
+    editor = EditorWindow(Image.new("RGBA", (320, 240), (0, 128, 255, 255)), Config())
+    try:
+        editor.show_all()
+        pump(100)
+        button = _find_menu_button(editor)
+        assert button is not None
+        menu = button.get_popup()
+        menu.popup_at_widget(
+            button, Gdk.Gravity.SOUTH_WEST, Gdk.Gravity.NORTH_WEST, None
+        )
+        pump(200)
+        background = menu.get_style_context().get_background_color(
+            Gtk.StateFlags.NORMAL
+        )
+        background_luma = background.red + background.green + background.blue
+        for item in menu.get_children():
+            label = item.get_child()
+            if label is None:
+                continue
+            foreground = label.get_style_context().get_color(Gtk.StateFlags.NORMAL)
+            foreground_luma = foreground.red + foreground.green + foreground.blue
+            assert foreground_luma > background_luma + 0.8
+        menu.popdown()
+    finally:
+        editor.destroy()
 
 
 def test_editor_draws_image_at_correct_position(pump):

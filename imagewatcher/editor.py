@@ -287,7 +287,7 @@ class EditorWindow(Gtk.Window):
                 if text == "sep":
                     submenu.append(Gtk.SeparatorMenuItem())
                     continue
-                entry = Gtk.MenuItem(label=text)
+                entry = Gtk.MenuItem.new_with_mnemonic(text)
                 entry.connect("activate", callback)
                 submenu.append(entry)
             menu_item.set_submenu(submenu)
