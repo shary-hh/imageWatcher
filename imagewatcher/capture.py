@@ -345,10 +345,12 @@ def capture_window(include_cursor=False):
     return image
 
 
-def capture_monitor(index, include_panel=True):
+def capture_monitor(index, include_panel=True, include_cursor=False):
     monitors = monitor_geometries()
     if not monitors:
-        return capture_screen(include_panel=include_panel)
+        return capture_screen(
+            include_cursor=include_cursor, include_panel=include_panel
+        )
     index = index % len(monitors)
     box = monitors[index]
     if not include_panel:
@@ -358,9 +360,12 @@ def capture_monitor(index, include_panel=True):
     if is_wayland():
         # Se recorta de la captura completa sin recortar para que el mapeo de
         # coordenadas siga usando los limites de los monitores.
-        image = capture_screen()
+        image = capture_screen(include_cursor=include_cursor)
         return _crop_logical_box(image, box.as_tuple())
-    return capture_region(*box.as_tuple())
+    image = capture_region(*box.as_tuple())
+    if include_cursor:
+        image = _composite_cursor(image, box)
+    return image
 
 
 # --------------------------------------------------------------------- scroll

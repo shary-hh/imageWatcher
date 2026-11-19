@@ -18,6 +18,7 @@ def test_defaults_and_persistence(monkeypatch, tmp_path):
     assert cfg.get("snap_enabled") is True
     assert cfg.get("color_zoom") == 11
     assert cfg.get("record_countdown") == 3
+    assert cfg.get("record_cursor") is True
     assert cfg.get("record_format") == "mp4"
     assert cfg.get("favorite_tools") == [
         "color", "magnifier", "ruler", "whiteboard",

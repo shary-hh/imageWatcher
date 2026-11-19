@@ -69,6 +69,12 @@ def test_capture_monitor_can_exclude_desktop_panel():
         assert cropped.size == (areas[0].width, areas[0].height)
 
 
+def test_capture_monitor_can_include_cursor():
+    image = capture.capture_monitor(0, include_cursor=True)
+    assert image.mode == "RGBA"
+    assert image.width > 0 and image.height > 0
+
+
 def test_capture_region_from_base():
     base = capture.capture_screen()
     region = capture.capture_region(10, 10, 120, 80, base=base)

@@ -15,6 +15,7 @@ class _Config:
         self.data = {
             "record_fps": 25,
             "record_audio": False,
+            "record_cursor": True,
             "record_countdown": 3,
             "record_format": "mp4",
         }
@@ -166,6 +167,33 @@ def test_gif_format_records_temp_video_and_disables_audio(monkeypatch):
         recorder.destroy()
 
 
+def test_recorder_command_controls_mouse_pointer(monkeypatch):
+    from types import SimpleNamespace
+
+    from imagewatcher import recorder as recorder_module
+
+    if capture.is_wayland():
+        pytest.skip("x11grab solo existe en X11")
+    monkeypatch.setattr(recorder_module, "has_encoder", lambda _name: True)
+    monkeypatch.setattr(
+        recorder_module.capture,
+        "monitor_geometries",
+        lambda: [SimpleNamespace(x=0, y=0, width=800, height=600)],
+    )
+
+    recorder = _recorder()
+    try:
+        recorder.cursor_check.set_active(False)
+        cmd = recorder._build_command()
+        assert cmd[cmd.index("-draw_mouse") + 1] == "0"
+
+        recorder.cursor_check.set_active(True)
+        cmd = recorder._build_command()
+        assert cmd[cmd.index("-draw_mouse") + 1] == "1"
+    finally:
+        recorder.destroy()
+
+
 def test_recording_failure_is_reported_from_ffmpeg_stderr():
     import io
 
@@ -273,6 +301,13 @@ def test_export_video_copies_and_adds_extension(tmp_path):
         assert ok is True
         destination = tmp_path / "copia.mp4"
         assert destination.read_bytes() == b"contenido"
+        assert "copia.mp4" in message
+
+        ok, message = recorder._export_video(str(tmp_path / "copia.gif"))
+        assert ok is True
+        corrected = tmp_path / "copia.mp4"
+        assert corrected.read_bytes() == b"contenido"
+        assert not (tmp_path / "copia.gif").exists()
         assert "copia.mp4" in message
 
         ok, _message = recorder._export_video(str(source))

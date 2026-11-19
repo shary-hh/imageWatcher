@@ -25,7 +25,8 @@ con Python + GTK3 + Pillow + Xlib.
 - Repetir la ultima captura.
 - Captura con retardo configurable.
 - Copia automatica al portapapeles y autoguardado opcional.
-- Opcion de incluir el cursor del raton.
+- Opcion de incluir el cursor del raton (pantalla completa, monitor principal y
+  ventana activa).
 - Opcion de incluir el panel (barra de menu) del escritorio en las capturas de
   pantalla completa y monitor (`Preferencias > General`).
 - En **Ventana con desplazamiento**, opcion de recortar la barra fija superior
@@ -94,6 +95,8 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 - Tras grabar, **Guardar video...** abre un dialogo para copiar la ultima
   grabacion a otra ubicacion.
 - FPS ajustable y audio del sistema opcional (segun el backend).
+- Mostrar u ocultar el cursor del raton en el video (X11 y GNOME Shell).
+  `wf-recorder` no permite controlarlo.
 
 ### Integracion
 - Barra de captura flotante (se puede ocultar desde Preferencias, la bandeja
@@ -124,6 +127,7 @@ Leyenda: ✅ implementado · ◐ parcial · ✗ requiere servicio externo/cuenta
 | Captura | Captura con cursor / retrasada / autoguardado | ✅ |
 | Captura | Multiples monitores | ✅ |
 | Grabacion | Pantalla completa / region + audio del sistema | ✅ |
+| Grabacion | Mostrar u ocultar el cursor del raton | ✅ |
 | Grabacion | Cuenta regresiva configurable antes de grabar | ✅ |
 | Grabacion | Exportar a GIF animado | ✅ |
 | Grabacion | Ventana / microfono | ◐ |

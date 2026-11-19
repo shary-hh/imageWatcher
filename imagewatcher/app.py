@@ -588,7 +588,9 @@ class Application:
                 self.last_capture = {"mode": "scrolling"}
             elif mode == "monitor":
                 image = capture.capture_monitor(
-                    0, include_panel=self.config.get("capture_panel", True)
+                    0,
+                    include_panel=self.config.get("capture_panel", True),
+                    include_cursor=self.config.get("capture_cursor", False),
                 )
                 self.last_capture = {"mode": "monitor"}
             elif mode in ("region", "fixed") and rect:
@@ -1144,8 +1146,14 @@ class PreferencesDialog(Gtk.Dialog):
         self.clipboard_check.set_active(self.config.get("copy_to_clipboard", True))
         box.pack_start(self.clipboard_check, False, False, 0)
 
-        self.cursor_check = Gtk.CheckButton(label="Incluir el cursor del raton")
+        self.cursor_check = Gtk.CheckButton(
+            label="Incluir el cursor del raton en las capturas"
+        )
         self.cursor_check.set_active(self.config.get("capture_cursor", False))
+        self.cursor_check.set_tooltip_text(
+            "Se aplica a Pantalla completa, Monitor principal y Ventana activa. "
+            "En Wayland depende del portal o de la herramienta de captura."
+        )
         box.pack_start(self.cursor_check, False, False, 0)
 
         self.panel_check = Gtk.CheckButton(
@@ -1429,6 +1437,16 @@ class PreferencesDialog(Gtk.Dialog):
         self.audio_check = Gtk.CheckButton(label="Grabar audio del sistema")
         self.audio_check.set_active(self.config.get("record_audio", False))
         box.pack_start(self.audio_check, False, False, 0)
+
+        self.record_cursor_check = Gtk.CheckButton(
+            label="Mostrar el cursor del raton en los videos"
+        )
+        self.record_cursor_check.set_active(self.config.get("record_cursor", True))
+        self.record_cursor_check.set_tooltip_text(
+            "Disponible con ffmpeg (X11) y GNOME Shell. "
+            "wf-recorder no permite controlar el cursor."
+        )
+        box.pack_start(self.record_cursor_check, False, False, 0)
         return box
 
     def _apply(self):
@@ -1454,6 +1472,7 @@ class PreferencesDialog(Gtk.Dialog):
             self.config.data["hotkeys"][key] = entry.get_text().strip()
         self.config["record_fps"] = int(self.fps_spin.get_value())
         self.config["record_audio"] = self.audio_check.get_active()
+        self.config["record_cursor"] = self.record_cursor_check.get_active()
         self.config["record_countdown"] = int(self.record_countdown_spin.get_value())
         self.config["record_format"] = (
             self.record_format_combo.get_active_id() or "mp4"

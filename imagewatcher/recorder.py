@@ -279,6 +279,21 @@ class RecorderWindow(Gtk.Window):
         grid.attach(self.audio_check, 1, 4, 1, 1)
         self._update_audio_state()
 
+        grid.attach(Gtk.Label(label="Cursor del raton:", xalign=0), 0, 5, 1, 1)
+        self.cursor_check = Gtk.CheckButton()
+        self._cursor_available = self.backend in ("x11", "gnome")
+        self.cursor_check.set_active(
+            config.get("record_cursor", True) if self._cursor_available else False
+        )
+        self.cursor_check.set_sensitive(self._cursor_available)
+        self.cursor_check.set_tooltip_text(
+            "Incluir el puntero del raton en el video."
+            if self._cursor_available
+            else "wf-recorder no permite mostrar ni ocultar el cursor en la grabacion."
+        )
+        self.cursor_check.connect("toggled", self._on_cursor_toggled)
+        grid.attach(self.cursor_check, 1, 5, 1, 1)
+
         self.timer_label = Gtk.Label(label="00:00")
         self.timer_label.set_xalign(0.5)
         self.timer_label.set_justify(Gtk.Justification.CENTER)
@@ -608,6 +623,7 @@ class RecorderWindow(Gtk.Window):
             "-f", "x11grab",
             "-framerate", str(fps),
             "-video_size", size,
+            "-draw_mouse", "1" if self.cursor_check.get_active() else "0",
             "-i", grab_input,
             # libx264/mpeg4 con yuv420p exigen dimensiones pares; la region
             # elegida puede medir un numero impar de pixeles.
@@ -700,6 +716,15 @@ class RecorderWindow(Gtk.Window):
         except Exception:
             pass
 
+    def _on_cursor_toggled(self, check):
+        if not self._cursor_available:
+            return
+        self.config["record_cursor"] = bool(check.get_active())
+        try:
+            self.config.save()
+        except Exception:
+            pass
+
     def _set_timer_text(self, text, countdown=False):
         """Actualiza el reloj. La cuenta regresiva se muestra grande y centrada."""
         size = "72pt" if countdown else "28pt"
@@ -770,8 +795,13 @@ class RecorderWindow(Gtk.Window):
         if not source or not os.path.isfile(source):
             return False, "No hay ninguna grabacion para guardar"
         extension = os.path.splitext(source)[1]
-        if extension and not os.path.splitext(destination)[1]:
-            destination += extension
+        destination_root, destination_ext = os.path.splitext(destination)
+        if extension and destination_ext.lower() != extension.lower():
+            # Evita archivos .gif que en realidad son MP4 (o al reves).
+            if destination_ext:
+                destination = destination_root + extension
+            else:
+                destination += extension
         if os.path.abspath(destination) == os.path.abspath(source):
             return True, f"Guardado: {destination}"
         try:
@@ -1019,7 +1049,9 @@ class RecorderWindow(Gtk.Window):
                         template,
                         {
                             "framerate": GLib.Variant("i", fps),
-                            "draw-cursor": GLib.Variant("b", True),
+                            "draw-cursor": GLib.Variant(
+                                "b", bool(self.cursor_check.get_active())
+                            ),
                         },
                     ),
                 ),
