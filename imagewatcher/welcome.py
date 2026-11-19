@@ -15,7 +15,7 @@ SECTIONS = [
             "Pantalla: captura todos los monitores.",
             "Ventana: captura la ventana activa.",
             "Region: arrastra para seleccionar; Enter confirma y Esc cancela.",
-            "Grabar: elige pantalla completa o region; el area se puede ajustar.",
+            "Grabar: pantalla completa o region; luego puedes guardar una copia.",
         ],
     ),
     (

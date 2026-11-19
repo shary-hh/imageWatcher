@@ -245,6 +245,53 @@ def test_cancel_button_mirrors_stop_and_cancels_countdown():
         recorder.destroy()
 
 
+def test_save_button_tracks_recording_state(tmp_path):
+    recorder = _recorder()
+    video = tmp_path / "grabacion.mp4"
+    video.write_bytes(b"video")
+    try:
+        assert recorder.save_btn.get_sensitive() is False
+        recorder.output_path = str(video)
+        recorder._update_save_button()
+        assert recorder.save_btn.get_sensitive() is True
+
+        recorder.process = object()
+        recorder._update_save_button()
+        assert recorder.save_btn.get_sensitive() is False
+        recorder.process = None
+    finally:
+        recorder.destroy()
+
+
+def test_export_video_copies_and_adds_extension(tmp_path):
+    recorder = _recorder()
+    source = tmp_path / "grabacion.mp4"
+    source.write_bytes(b"contenido")
+    recorder.output_path = str(source)
+    try:
+        ok, message = recorder._export_video(str(tmp_path / "copia"))
+        assert ok is True
+        destination = tmp_path / "copia.mp4"
+        assert destination.read_bytes() == b"contenido"
+        assert "copia.mp4" in message
+
+        ok, _message = recorder._export_video(str(source))
+        assert ok is True
+        assert source.read_bytes() == b"contenido"
+    finally:
+        recorder.destroy()
+
+
+def test_save_video_without_recording_reports_it():
+    recorder = _recorder()
+    try:
+        recorder.output_path = None
+        recorder.save_video()
+        assert "No hay ninguna grabacion" in recorder.status.get_text()
+    finally:
+        recorder.destroy()
+
+
 def test_shutdown_stops_and_saves_the_recording():
     recorder = _recorder()
     calls = []

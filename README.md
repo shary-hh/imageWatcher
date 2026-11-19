@@ -91,6 +91,8 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
   ventana del grabador.
 - Boton **Cancelar** y atajo global `Ctrl+Alt+X` para descartar la grabacion
   en curso sin guardar el archivo.
+- Tras grabar, **Guardar video...** abre un dialogo para copiar la ultima
+  grabacion a otra ubicacion.
 - FPS ajustable y audio del sistema opcional (segun el backend).
 
 ### Integracion

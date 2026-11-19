@@ -308,6 +308,14 @@ class RecorderWindow(Gtk.Window):
         )
         root.pack_start(buttons, False, False, 0)
 
+        self.save_btn = Gtk.Button(label="Guardar video...")
+        self.save_btn.set_tooltip_text(
+            "Copiar la ultima grabacion a otra ubicacion"
+        )
+        self.save_btn.set_sensitive(False)
+        self.save_btn.connect("clicked", lambda *_: self.save_video())
+        root.pack_start(self.save_btn, False, False, 0)
+
         toggle_hotkey = (config.get("hotkeys") or {}).get("record_toggle", "")
         cancel_hotkey = (config.get("hotkeys") or {}).get("record_cancel", "")
         hints = []
@@ -751,6 +759,67 @@ class RecorderWindow(Gtk.Window):
         self.present()
         self.status.set_text("No hay grabacion activa")
 
+    def _update_save_button(self):
+        path = self.output_path
+        ready = bool(path) and os.path.isfile(path) and not self.is_busy()
+        self.save_btn.set_sensitive(ready)
+
+    def _export_video(self, destination):
+        """Copia la ultima grabacion a ``destination`` y devuelve (ok, mensaje)."""
+        source = self.output_path
+        if not source or not os.path.isfile(source):
+            return False, "No hay ninguna grabacion para guardar"
+        extension = os.path.splitext(source)[1]
+        if extension and not os.path.splitext(destination)[1]:
+            destination += extension
+        if os.path.abspath(destination) == os.path.abspath(source):
+            return True, f"Guardado: {destination}"
+        try:
+            shutil.copy2(source, destination)
+        except Exception as exc:
+            return False, f"Error al guardar: {exc}"
+        return True, f"Guardado: {destination}"
+
+    def save_video(self):
+        """Abre un dialogo para guardar una copia de la ultima grabacion."""
+        if self.is_busy():
+            self.status.set_text("Espera a que termine la grabacion")
+            return
+        if not self.output_path or not os.path.isfile(self.output_path):
+            self.status.set_text("No hay ninguna grabacion para guardar")
+            return
+        dialog = Gtk.FileChooserDialog(
+            title="Guardar video",
+            transient_for=self,
+            action=Gtk.FileChooserAction.SAVE,
+        )
+        dialog.add_buttons(
+            "Cancelar", Gtk.ResponseType.CANCEL,
+            "Guardar", Gtk.ResponseType.OK,
+        )
+        dialog.set_do_overwrite_confirmation(True)
+        dialog.set_current_name(os.path.basename(self.output_path))
+        directory = os.path.dirname(self.output_path)
+        if directory:
+            dialog.set_current_folder(directory)
+        extension = os.path.splitext(self.output_path)[1].lstrip(".").lower()
+        if extension:
+            file_filter = Gtk.FileFilter()
+            file_filter.set_name(extension.upper())
+            file_filter.add_pattern(f"*.{extension}")
+            dialog.add_filter(file_filter)
+        ui.apply_dark(dialog)
+        try:
+            response = dialog.run()
+            destination = dialog.get_filename()
+        finally:
+            dialog.destroy()
+        if response != Gtk.ResponseType.OK or not destination:
+            return
+        _ok, message = self._export_video(destination)
+        self.status.set_text(message)
+        self._update_save_button()
+
     def _show_countdown_overlay(self):
         if not self.countdown_overlay_enabled:
             return
@@ -777,6 +846,7 @@ class RecorderWindow(Gtk.Window):
         except Exception as exc:
             self.present()
             self.status.set_text(f"No se pudo capturar la pantalla: {exc}")
+            self._update_save_button()
             return
         from .region import RegionSelector
 
@@ -800,6 +870,7 @@ class RecorderWindow(Gtk.Window):
             self.stop_btn.set_sensitive(False)
             self.format_combo.set_sensitive(True)
             self._update_area_ui()
+            self._update_save_button()
             if not self._closing:
                 self.present()
                 self.status.set_text("Grabacion cancelada")
@@ -861,6 +932,7 @@ class RecorderWindow(Gtk.Window):
         self.start_btn.set_sensitive(self._can_start())
         self.stop_btn.set_sensitive(False)
         self.format_combo.set_sensitive(True)
+        self._update_save_button()
 
     def _start(self):
         if self._countdown_timer is not None or self._converting:
@@ -870,6 +942,7 @@ class RecorderWindow(Gtk.Window):
         if not self._can_start():
             self.status.set_text("No se puede iniciar la grabacion")
             return
+        self.save_btn.set_sensitive(False)
         self._save_countdown()
         seconds = int(self.countdown_spin.get_value())
         if self._area_is_region():
@@ -896,6 +969,7 @@ class RecorderWindow(Gtk.Window):
             self.start_btn.set_sensitive(self._can_start())
             self.stop_btn.set_sensitive(False)
             self.format_combo.set_sensitive(True)
+            self._update_save_button()
             return
         try:
             self._close_stderr()
@@ -912,12 +986,14 @@ class RecorderWindow(Gtk.Window):
             self.start_btn.set_sensitive(self._can_start())
             self.stop_btn.set_sensitive(False)
             self.format_combo.set_sensitive(True)
+            self._update_save_button()
             return
         self._stop_signal = self.backend == "wf-recorder"
         self.start_time = time.time()
         self.start_btn.set_sensitive(False)
         self.stop_btn.set_sensitive(True)
         self.format_combo.set_sensitive(False)
+        self.save_btn.set_sensitive(False)
         self.status.set_text(f"Grabando en {self.output_path}")
         if self._timer:
             GLib.source_remove(self._timer)
@@ -958,12 +1034,14 @@ class RecorderWindow(Gtk.Window):
             self.start_btn.set_sensitive(self._can_start())
             self.stop_btn.set_sensitive(False)
             self.format_combo.set_sensitive(True)
+            self._update_save_button()
             return
         if not success:
             self.status.set_text("GNOME Shell rechazo la grabacion.")
             self.start_btn.set_sensitive(self._can_start())
             self.stop_btn.set_sensitive(False)
             self.format_combo.set_sensitive(True)
+            self._update_save_button()
             return
         self._gnome_bus = bus
         self._gnome_screencast = True
@@ -975,6 +1053,7 @@ class RecorderWindow(Gtk.Window):
         self.start_btn.set_sensitive(False)
         self.stop_btn.set_sensitive(True)
         self.format_combo.set_sensitive(False)
+        self.save_btn.set_sensitive(False)
         self.status.set_text(f"Grabando en {self.output_path}")
         if self._timer:
             GLib.source_remove(self._timer)
@@ -1079,6 +1158,7 @@ class RecorderWindow(Gtk.Window):
                 self.stop_btn.set_sensitive(False)
                 self.format_combo.set_sensitive(True)
                 self.status.set_text(f"Error al grabar: {error}")
+                self._update_save_button()
                 return
         if not stopped:
             return
@@ -1088,6 +1168,7 @@ class RecorderWindow(Gtk.Window):
         if discard:
             self._discard_outputs()
             self.status.set_text("Grabacion cancelada")
+            self._update_save_button()
             return
         temp = self._temp_path
         self._temp_path = None
@@ -1095,6 +1176,7 @@ class RecorderWindow(Gtk.Window):
             self._start_gif_conversion(temp)
         else:
             self.status.set_text(f"Guardado: {self.output_path}")
+            self._update_save_button()
 
     def _discard_outputs(self):
         for path in (self._temp_path, self.output_path):
@@ -1117,6 +1199,7 @@ class RecorderWindow(Gtk.Window):
         self.start_btn.set_sensitive(False)
         self.stop_btn.set_sensitive(False)
         self.format_combo.set_sensitive(False)
+        self.save_btn.set_sensitive(False)
         self.status.set_text("Generando GIF...")
         self.status.set_tooltip_text("")
         fps = self._target_fps()
@@ -1147,6 +1230,7 @@ class RecorderWindow(Gtk.Window):
             self.status.set_text(f"Error al crear el GIF: {detail}")
             if temp_path:
                 self.status.set_tooltip_text(f"Video temporal: {temp_path}")
+        self._update_save_button()
         return False
 
 
