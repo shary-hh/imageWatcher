@@ -2,6 +2,7 @@
 import logging
 import math
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -1080,10 +1081,22 @@ class Application:
             except Exception:
                 pass
 
+    def _shutdown_tools(self):
+        for window in list(self.tool_windows.values()):
+            try:
+                if hasattr(window, "shutdown"):
+                    window.shutdown()
+            except Exception:
+                pass
+
     def quit(self):
+        if getattr(self, "_quitting", False):
+            return
+        self._quitting = True
         self.config.save()
         self.hotkeys.stop()
         self._escape_grabber.stop()
+        self._shutdown_tools()
         Gtk.main_quit()
 
 
@@ -1550,6 +1563,20 @@ def main():
         return 0
     app = Application()
     instance.set_callback(lambda _action: app.present())
+
+    def _on_signal(*_args):
+        app.quit()
+        return False
+
+    for name in ("SIGTERM", "SIGINT"):
+        signum = getattr(signal, name, None)
+        if signum is None:
+            continue
+        try:
+            GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signum, _on_signal)
+        except Exception:
+            pass
+
     if app.config.get("show_welcome", True):
         app.show_welcome()
     try:

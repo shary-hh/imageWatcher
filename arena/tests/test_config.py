@@ -167,6 +167,19 @@ def test_cancel_recorder_uses_the_window():
     Application.cancel_recording(SimpleNamespace(tool_windows={}))
 
 
+def test_shutdown_stops_tool_windows():
+    from types import SimpleNamespace
+
+    from imagewatcher.app import Application
+
+    calls = []
+    recorder = SimpleNamespace(shutdown=lambda: calls.append("recorder"))
+    other = SimpleNamespace()
+    app = SimpleNamespace(tool_windows={"recorder": recorder, "other": other})
+    Application._shutdown_tools(app)
+    assert calls == ["recorder"]
+
+
 def test_color_history_uses_selected_format():
     from types import SimpleNamespace
 

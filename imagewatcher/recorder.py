@@ -1106,6 +1106,11 @@ class RecorderWindow(Gtk.Window):
                 pass
         self._temp_path = None
 
+    def shutdown(self):
+        """Detiene la grabacion al cerrar la aplicacion (guarda el archivo)."""
+        self._closing = True
+        self._stop()
+
     def _start_gif_conversion(self, video_path):
         """Convierte el video temporal a GIF sin bloquear la interfaz."""
         self._converting = True

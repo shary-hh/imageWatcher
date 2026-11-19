@@ -60,10 +60,13 @@ echo "==> Version instalada: $INSTALLED"
 if [ "$RESTART" -eq 1 ]; then
     if pgrep -f 'python3 -m imagewatcher' >/dev/null 2>&1; then
         echo "==> Cerrando imageWatcher..."
-        # SIGTERM no guarda la configuracion en memoria: conserva los cambios
-        # hechos a mano en config.json.
+        # SIGTERM cierra la app de forma ordenada: guarda la configuracion y
+        # finaliza cualquier grabacion en curso.
         pkill -TERM -f 'python3 -m imagewatcher' || true
-        sleep 1
+        for _ in $(seq 1 30); do
+            pgrep -f 'python3 -m imagewatcher' >/dev/null 2>&1 || break
+            sleep 0.5
+        done
     fi
     if command -v imagewatcher >/dev/null 2>&1; then
         echo "==> Iniciando imageWatcher..."

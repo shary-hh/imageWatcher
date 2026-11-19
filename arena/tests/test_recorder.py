@@ -245,6 +245,18 @@ def test_cancel_button_mirrors_stop_and_cancels_countdown():
         recorder.destroy()
 
 
+def test_shutdown_stops_and_saves_the_recording():
+    recorder = _recorder()
+    calls = []
+    recorder._stop = lambda: calls.append("stop")
+    try:
+        recorder.shutdown()
+        assert calls == ["stop"]
+        assert recorder._closing is True
+    finally:
+        recorder.destroy()
+
+
 def test_discard_outputs_removes_the_recording(tmp_path):
     recorder = _recorder()
     output = tmp_path / "grabacion.mp4"
