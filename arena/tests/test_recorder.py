@@ -138,6 +138,7 @@ def test_gif_format_records_temp_video_and_disables_audio(monkeypatch):
     recorder = _recorder()
     recorder.region = Image.new("RGBA", (720, 153))
     recorder.region_offset = (10, 20)
+    recorder._set_area_mode("region")
     recorder.audio_check.set_active(True)
     try:
         recorder.format_combo.set_active_id("gif")
@@ -193,6 +194,7 @@ def test_start_with_region_uses_the_editable_overlay():
     recorder = _recorder()
     recorder._can_start = lambda: True
     recorder.region = Image.new("RGBA", (200, 100))
+    recorder._set_area_mode("region")
     recorder.countdown_spin.set_value(4)
     calls = []
     recorder._begin_region_countdown = lambda seconds: calls.append(("region", seconds))
@@ -201,6 +203,61 @@ def test_start_with_region_uses_the_editable_overlay():
     try:
         recorder._start()
         assert calls == [("region", 4)]
+    finally:
+        recorder.destroy()
+
+
+def test_area_combo_opens_the_picker_only_when_needed():
+    recorder = _recorder()
+    calls = []
+    recorder._pick_region = lambda *_: calls.append("pick")
+    try:
+        recorder.area_combo.set_active_id("region")
+        assert calls == ["pick"]
+
+        calls.clear()
+        recorder.region = Image.new("RGBA", (200, 100))
+        recorder._update_area_ui()
+        recorder.area_combo.set_active_id("fullscreen")
+        recorder.area_combo.set_active_id("region")
+        assert calls == []
+    finally:
+        recorder.destroy()
+
+
+def test_area_mode_switches_between_fullscreen_and_region(monkeypatch):
+    from types import SimpleNamespace
+
+    from imagewatcher import recorder as recorder_module
+
+    if capture.is_wayland():
+        pytest.skip("la prueba usa la captura x11")
+    monkeypatch.setattr(recorder_module, "has_encoder", lambda _name: True)
+    monkeypatch.setattr(
+        recorder_module.capture,
+        "monitor_geometries",
+        lambda: [SimpleNamespace(x=0, y=0, width=800, height=600)],
+    )
+
+    recorder = _recorder()
+    recorder.region = Image.new("RGBA", (320, 200))
+    recorder.region_offset = (40, 50)
+    try:
+        recorder._set_area_mode("fullscreen")
+        cmd = recorder._build_command()
+        assert cmd[cmd.index("-video_size") + 1] == "800x600"
+        assert cmd[cmd.index("-i") + 1].endswith("+0,0")
+
+        recorder._set_area_mode("region")
+        recorder._update_area_ui()
+        cmd = recorder._build_command()
+        assert cmd[cmd.index("-video_size") + 1] == "320x200"
+        assert cmd[cmd.index("-i") + 1].endswith("+40,50")
+        assert recorder.pick_button.get_label() == "Ajustar 320x200"
+
+        recorder._set_area_mode("fullscreen")
+        recorder._update_area_ui()
+        assert recorder.pick_button.get_label() == "Elegir region..."
     finally:
         recorder.destroy()
 
@@ -246,8 +303,9 @@ def test_region_selection_updates_the_pick_button(monkeypatch):
         recorder._pick_region()
         assert captured["initial"] is None
         captured["done"](Image.new("RGBA", (200, 100)))
-        assert recorder.pick_button.get_label() == "Ajustar region..."
+        assert recorder.pick_button.get_label() == "Ajustar 200x100"
         assert recorder.region.size == (200, 100)
+        assert recorder.area_combo.get_active_id() == "region"
 
         recorder._pick_region()
         assert captured["initial"] == (0, 0, 200, 100)

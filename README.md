@@ -73,8 +73,9 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 - **Pizarra** para dibujar y guardar.
 
 ### Grabacion de pantalla
-- X11: pantalla completa o region seleccionada, con `ffmpeg` (x11grab). La
-  region se puede mover y redimensionar antes de grabar, y se conserva al
+- X11: pantalla completa o region con `ffmpeg` (x11grab).
+- En **Area** puedes elegir **Pantalla completa** o **Region**. Si eliges una
+  region, puedes moverla y redimensionarla antes de grabar, y se conserva al
   volver a pulsar **Ajustar region...**.
 - Al iniciar una grabacion con region, el area vuelve a mostrarse con sus
   tiradores y la cuenta regresiva: se puede mover/redimensionar, **Enter**
@@ -82,8 +83,8 @@ con la tecla **Esc**, volviendo a elegirlas o con *Ocultar superposiciones*
 - Wayland/wlroots: pantalla completa o region con `wf-recorder` (y `slurp`
   para elegir la region).
 - Wayland/GNOME: grabacion de pantalla completa con la API de GNOME Shell.
-- Cuenta regresiva configurable antes de empezar (0-30 s), que se muestra a
-  pantalla completa.
+- Cuenta regresiva configurable antes de empezar (0-30 s): a pantalla completa,
+  o integrada en el area editable cuando se graba una region.
 - Salida en **MP4** o **GIF animado**. El GIF no incluye audio y se limita a
   15 FPS, ideal para compartir una region corta.
 - Atajo global `Ctrl+Alt+R` para iniciar o detener la grabacion sin abrir la

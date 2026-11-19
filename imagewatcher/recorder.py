@@ -202,6 +202,7 @@ class RecorderWindow(Gtk.Window):
         self._stderr_file = None
         self._region_selector = None
         self._closing = False
+        self._updating_area = False
         self.set_default_size(440, 300)
         subtitle = {
             "x11": "Video con ffmpeg",
@@ -221,9 +222,16 @@ class RecorderWindow(Gtk.Window):
         root.pack_start(grid, False, False, 0)
 
         grid.attach(Gtk.Label(label="Area:", xalign=0), 0, 0, 1, 1)
-        self.area_label = Gtk.Label(label="Pantalla completa", xalign=0)
-        grid.attach(self.area_label, 1, 0, 1, 1)
-        pick = Gtk.Button(label="Seleccionar region...")
+        self.area_combo = Gtk.ComboBoxText()
+        self.area_combo.append("fullscreen", "Pantalla completa")
+        self.area_combo.append("region", "Region")
+        self.area_combo.set_active_id("fullscreen")
+        self.area_combo.set_tooltip_text(
+            "Pantalla completa o una region seleccionada de la pantalla."
+        )
+        self.area_combo.connect("changed", self._on_area_changed)
+        grid.attach(self.area_combo, 1, 0, 1, 1)
+        pick = Gtk.Button(label="Elegir region...")
         pick.set_tooltip_text(
             "Arrastra para elegir la region. Despues puedes moverla o "
             "redimensionarla con los tiradores antes de confirmar."
@@ -231,6 +239,7 @@ class RecorderWindow(Gtk.Window):
         pick.connect("clicked", self._pick_region)
         self.pick_button = pick
         grid.attach(pick, 2, 0, 1, 1)
+        self._update_area_ui()
 
         grid.attach(Gtk.Label(label="FPS:", xalign=0), 0, 1, 1, 1)
         fps_adj = Gtk.Adjustment(value=config.get("record_fps", 25), lower=5, upper=60, step_increment=1)
@@ -338,6 +347,46 @@ class RecorderWindow(Gtk.Window):
         self._closing = True
         self._stop()
 
+    def _area_is_region(self):
+        return self.area_combo.get_active_id() == "region"
+
+    def _set_area_mode(self, mode):
+        self._updating_area = True
+        try:
+            self.area_combo.set_active_id(mode)
+        finally:
+            self._updating_area = False
+
+    def _has_region(self):
+        return self.region is not None or self.region_geometry is not None
+
+    def _region_size_text(self):
+        if self.region is not None:
+            return f"{self.region.width}x{self.region.height}"
+        if self.region_geometry:
+            return f"{self.region_geometry[2]}x{self.region_geometry[3]}"
+        return ""
+
+    def _update_area_ui(self):
+        if self._area_is_region() and self._has_region():
+            self.pick_button.set_label(f"Ajustar {self._region_size_text()}")
+        else:
+            self.pick_button.set_label("Elegir region...")
+
+    def _on_area_changed(self, _combo):
+        if self._updating_area:
+            return
+        if self._area_is_region() and not self._has_region():
+            self._pick_region()
+        self._update_area_ui()
+
+    def _region_edit_cancelled(self):
+        if not self._closing:
+            self.show()
+        if not self._has_region():
+            self._set_area_mode("fullscreen")
+        self._update_area_ui()
+
     def _initial_region_rect(self, base):
         """Rectangulo inicial para reeditar la region (coordenadas del selector)."""
         if self.region_geometry:
@@ -370,7 +419,7 @@ class RecorderWindow(Gtk.Window):
             self.hide()
             base = capture.capture_screen()
         except Exception as exc:
-            self.show()
+            self._region_edit_cancelled()
             self.status.set_text(f"No se pudo capturar la pantalla: {exc}")
             return
         from .region import RegionSelector
@@ -380,14 +429,14 @@ class RecorderWindow(Gtk.Window):
         def finished(image):
             self.region = image
             self.region_offset = holder.get("rect", (0, 0, image.width, image.height))[:2]
-            self.area_label.set_text(f"Region {image.width}x{image.height}")
-            self.pick_button.set_label("Ajustar region...")
+            self._set_area_mode("region")
+            self._update_area_ui()
             self.show()
 
         selector = RegionSelector(
             base,
             finished,
-            on_cancel=self.show,
+            on_cancel=self._region_edit_cancelled,
             detect_windows=False,
             initial_rect=self._initial_region_rect(base),
         )
@@ -403,27 +452,29 @@ class RecorderWindow(Gtk.Window):
     def _pick_region_wayland(self):
         if self.backend is None:
             self.status.set_text("No hay un backend de grabacion disponible.")
+            self._region_edit_cancelled()
             return
         if self.backend == "gnome":
             self.status.set_text(
                 "GNOME Wayland solo permite grabar la pantalla completa desde aqui."
             )
+            self._region_edit_cancelled()
             return
         if shutil.which("slurp") and not self.region_geometry:
             self.hide()
             output = session.command_output(["slurp"], timeout=120)
             if not output:
-                self.show()
+                self._region_edit_cancelled()
                 return
             match = re.search(r"(-?\d+),(-?\d+)\s+(\d+)x(\d+)", output.strip())
             if match is None:
-                self.show()
+                self._region_edit_cancelled()
                 self.status.set_text("No se pudo interpretar la region de slurp.")
                 return
             x, y, width, height = (int(value) for value in match.groups())
             self.region_geometry = (x, y, width, height)
-            self.area_label.set_text(f"Region {width}x{height}")
-            self.pick_button.set_label("Ajustar region...")
+            self._set_area_mode("region")
+            self._update_area_ui()
             self.show()
             return
 
@@ -431,7 +482,7 @@ class RecorderWindow(Gtk.Window):
             self.hide()
             base = capture.capture_screen()
         except Exception as exc:
-            self.show()
+            self._region_edit_cancelled()
             self.status.set_text(f"No se pudo capturar la pantalla: {exc}")
             return
         from .region import RegionSelector
@@ -447,14 +498,14 @@ class RecorderWindow(Gtk.Window):
                 self.region_geometry = capture.image_to_logical_box(
                     (0, 0, base.width, base.height), base
                 )
-            self.area_label.set_text(f"Region {image.width}x{image.height}")
-            self.pick_button.set_label("Ajustar region...")
+            self._set_area_mode("region")
+            self._update_area_ui()
             self.show()
 
         selector = RegionSelector(
             base,
             finished,
-            on_cancel=self.show,
+            on_cancel=self._region_edit_cancelled,
             detect_windows=False,
             preview_size=capture.region_preview_size(),
             initial_rect=self._initial_region_rect(base),
@@ -485,7 +536,7 @@ class RecorderWindow(Gtk.Window):
             "-r", str(fps),
             "--pixel-format", "yuv420p",
         ]
-        if self.region_geometry:
+        if self._area_is_region() and self.region_geometry:
             x, y, width, height = self.region_geometry
             # yuv420p necesita dimensiones pares (wf-recorder no tiene filtros).
             width = max(2, width - width % 2)
@@ -506,7 +557,7 @@ class RecorderWindow(Gtk.Window):
         display = os.environ.get("DISPLAY", ":0.0")
         fps = self._target_fps()
         monitors = capture.monitor_geometries()
-        if self.region is not None:
+        if self._area_is_region() and self.region is not None:
             width, height = self.region.width, self.region.height
             ox, oy = self.region_offset
             grab_input = f"{display}+{int(ox)},{int(oy)}"
@@ -705,8 +756,8 @@ class RecorderWindow(Gtk.Window):
             self.region_offset = holder.get(
                 "rect", (0, 0, image.width, image.height)
             )[:2]
-            self.area_label.set_text(f"Region {image.width}x{image.height}")
-            self.pick_button.set_label("Ajustar region...")
+            self._set_area_mode("region")
+            self._update_area_ui()
             self._start_recording()
             if not self.is_busy():
                 self.present()
@@ -716,6 +767,7 @@ class RecorderWindow(Gtk.Window):
             self.start_btn.set_sensitive(self._can_start())
             self.stop_btn.set_sensitive(False)
             self.format_combo.set_sensitive(True)
+            self._update_area_ui()
             if not self._closing:
                 self.present()
                 self.status.set_text("Grabacion cancelada")
@@ -788,7 +840,10 @@ class RecorderWindow(Gtk.Window):
             return
         self._save_countdown()
         seconds = int(self.countdown_spin.get_value())
-        if self.region is not None:
+        if self._area_is_region():
+            if not self._has_region():
+                self.status.set_text("Elige una region para grabar")
+                return
             # Deja ajustar la region (mover/redimensionar) antes de grabar.
             self._begin_region_countdown(seconds)
         elif seconds > 0:

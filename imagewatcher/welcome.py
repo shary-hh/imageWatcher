@@ -15,7 +15,7 @@ SECTIONS = [
             "Pantalla: captura todos los monitores.",
             "Ventana: captura la ventana activa.",
             "Region: arrastra para seleccionar; Enter confirma y Esc cancela.",
-            "Grabar: video MP4 o GIF; el area se puede mover y redimensionar.",
+            "Grabar: elige pantalla completa o region; el area se puede ajustar.",
         ],
     ),
     (
