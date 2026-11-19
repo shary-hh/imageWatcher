@@ -53,44 +53,42 @@ class CountdownOverlay(Gtk.Window):
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
         self.set_accept_focus(False)
+        self.set_focus_on_map(False)
+        self.set_can_focus(False)
         self.set_type_hint(
-            Gdk.WindowTypeHint.NOTIFICATION
-            if hasattr(Gdk.WindowTypeHint, "NOTIFICATION")
-            else Gdk.WindowTypeHint.NORMAL
+            Gdk.WindowTypeHint.OVERLAY
+            if hasattr(Gdk.WindowTypeHint, "OVERLAY")
+            else Gdk.WindowTypeHint.DOCK
         )
+        self.get_style_context().add_class("countdown-window")
         visual = self.get_screen().get_rgba_visual()
         if visual is not None:
             self.set_visual(visual)
         self.set_app_paintable(True)
-        self.get_style_context().add_class("countdown-overlay")
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        box.set_halign(Gtk.Align.CENTER)
-        box.set_valign(Gtk.Align.CENTER)
+        overlay = Gtk.Overlay()
+        background = Gtk.DrawingArea()
+        background.connect("draw", self._draw_background)
+        overlay.add(background)
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        content.set_halign(Gtk.Align.CENTER)
+        content.set_valign(Gtk.Align.CENTER)
         self.number = Gtk.Label(label="")
         self.number.get_style_context().add_class("countdown-number")
-        box.pack_start(self.number, False, False, 0)
+        content.pack_start(self.number, False, False, 0)
         hint = Gtk.Label(label="La grabacion comienza en breve")
         hint.get_style_context().add_class("countdown-hint")
-        box.pack_start(hint, False, False, 0)
-        self.add(box)
+        content.pack_start(hint, False, False, 0)
+        overlay.add_overlay(content)
+        self.add(overlay)
 
-        if not capture.is_wayland():
-            monitors = capture.monitor_geometries()
-            if monitors:
-                left = min(monitor.x for monitor in monitors)
-                top = min(monitor.y for monitor in monitors)
-                right = max(monitor.x + monitor.width for monitor in monitors)
-                bottom = max(monitor.y + monitor.height for monitor in monitors)
-                width, height = right - left, bottom - top
-            else:
-                left, top = 0, 0
-                width, height = capture.virtual_screen_size()
-            self.set_default_size(width, height)
-            self.move(left, top)
-            self.resize(width, height)
-            self.connect("realize", lambda *_: self._click_through())
-            self._click_through()
+        width, height = capture.virtual_screen_size()
+        self.set_default_size(width, height)
+        self.move(0, 0)
+        self.resize(width, height)
+        self.connect("realize", lambda *_: self._click_through())
+        self._click_through()
         self.show_all()
         if capture.is_wayland():
             try:
@@ -99,7 +97,15 @@ class CountdownOverlay(Gtk.Window):
                 )
             except Exception:
                 self.fullscreen()
+        else:
+            # El gestor de ventanas es quien garantiza la pantalla completa.
+            self.fullscreen()
         self.present()
+
+    def _draw_background(self, _widget, cr):
+        cr.set_source_rgba(0.02, 0.03, 0.05, 0.82)
+        cr.paint()
+        return False
 
     def _click_through(self):
         """Deja pasar los clics: el aviso es solo visual."""
@@ -488,6 +494,8 @@ class RecorderWindow(Gtk.Window):
         self._countdown_remaining = int(seconds)
         self.start_btn.set_sensitive(False)
         self.stop_btn.set_sensitive(True)
+        # La ventana no debe duplicar la cuenta ni salir luego en el video.
+        self.hide()
         self._show_countdown()
         self._countdown_timer = GLib.timeout_add(1000, self._countdown_tick)
 
