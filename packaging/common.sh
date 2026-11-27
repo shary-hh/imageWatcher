@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Helpers compartidos por los scripts de empaquetado.
-# Se hace "source" desde build_deb.sh y build_appimage.sh.
+# Se hace "source" desde build_deb.sh, build_appimage.sh, build_flatpak.sh y build_rpm.sh.
 set -euo pipefail
 
 PACKAGING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

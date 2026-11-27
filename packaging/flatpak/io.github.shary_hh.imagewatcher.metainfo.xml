@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.shary_hh.imagewatcher</id>
+  <name>imageWatcher</name>
+  <summary>Captura, edita y graba la pantalla</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      Suite de captura de pantalla para Linux con editor de imagenes,
+      herramientas de diseno, grabacion de video y atajos globales.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.shary_hh.imagewatcher.desktop</launchable>
+  <url type="homepage">https://github.com/shary-hh/imageWatcher</url>
+  <developer id="io.github.shary_hh">
+    <name>imageWatcher contributors</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+</component>

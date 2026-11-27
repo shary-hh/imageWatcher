@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=imageWatcher
+Comment=Captura, edita y comparte la pantalla
+Exec=imagewatcher
+Icon=imagewatcher
+Terminal=false
+Categories=Graphics;
+StartupWMClass=imageWatcher
+Keywords=captura;screenshot;editor;pantalla;

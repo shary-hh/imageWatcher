@@ -342,10 +342,16 @@ En `packaging/` hay scripts que toman la version desde `imagewatcher/__init__.py
 ```bash
 ./packaging/build_deb.sh        # dist/imagewatcher_<version>_all.deb
 ./packaging/build_appimage.sh   # dist/imageWatcher-<version>-x86_64.AppImage
+./packaging/build_flatpak.sh    # dist/imageWatcher-<version>-x86_64.flatpak
+./packaging/build_rpm.sh        # dist/imagewatcher-<version>-1.<dist>.noarch.rpm
 # .exe (en Windows):  powershell -File packaging\windows\build_exe.ps1
 ```
 
-Detalles y limitaciones del `.exe` en `packaging/README.md` y
+El Flatpak usa `org.gnome.Platform//50` (incluye Python 3, GTK3, PyGObject y
+ffmpeg) y empaqueta Pillow, python-xlib y six. El RPM se puede construir con
+`rpmbuild` o, si no esta instalado, dentro de un contenedor Fedora con Docker.
+
+Detalles y limitaciones en `packaging/README.md` y
 `packaging/windows/README.md`.
 
 ## Estructura
@@ -363,7 +369,7 @@ imagewatcher/
   gtk_util.py      utilidades GTK/PIL
   tools/           selector de color, lupa, regla, punto de mira, transportador, pizarra
 arena/             arena de pruebas (tests + Xvfb + Docker)
-packaging/         scripts .deb / AppImage / .exe + assets
+packaging/         scripts .deb / AppImage / Flatpak / RPM / .exe + assets
 run.sh             lanzador
 install.sh         instalador
 ```
